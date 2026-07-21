@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cuaderno de Dardos — Cerezos</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3B0F30">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-apple-touch.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cuad. Dardos">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -69,6 +76,7 @@ td.txt{font-family:'Inter',sans-serif;}
 tr:hover td{background:#FBF8F0;}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;font-family:'Inter',sans-serif;letter-spacing:.3px;}
 .badge-calibrado{background:#E3EEDC;color:var(--ok);}
+.badge-real{background:#1F3D1A;color:#8FD19E;font-weight:700;}
 .badge-referencial{background:#F3E6D6;color:var(--gold);}
 .badge-preliminar{background:#5C1A12;color:#F5B199;}
 .varcard-preliminar{border-color:#C0504A;background:#FEF6F4;}
@@ -198,6 +206,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" onerror="window.__fbLoadFailed=true"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" onerror="window.__fbLoadFailed=true"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" onerror="window.__fbLoadFailed=true"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   window.__FIREBASE_OK__ = false;
   let auth = null, db = null;
@@ -281,6 +290,26 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
   </div>
 </div>
 
+<div id="modalFilaYema" style="display:none;">
+  <div class="login-card" style="max-width:480px;">
+    <button class="modal-close" id="btnCerrarModalYema" title="Cerrar">×</button>
+    <h1 style="font-size:20px;">Análisis de yema real</h1>
+    <p class="sub" id="modalYemaSub">Ingresa lo que te dio el análisis de yema real de este cuartel/variedad. Se usa solo para este cuartel, no cambia la Ficha varietal.</p>
+    <div class="grid">
+      <div class="field"><label>Yemas / dardo</label><input type="number" step="0.01" id="fy-yemasdardo"></div>
+      <div class="field"><label>Flores / yema</label><input type="number" step="0.01" id="fy-floresyema"></div>
+      <div class="field"><label>Flores / dardo <span style="font-weight:400;font-size:10px;color:var(--muted);">(calculado, editable)</span></label><input type="number" step="0.01" id="fy-floresdardo"></div>
+      <div class="field"><label>Frutos / dardo <span style="font-weight:400;font-size:10px;color:var(--muted);">(calculado, editable)</span></label><input type="number" step="0.01" id="fy-frutosdardo"></div>
+      <div class="field"><label>Flores / ramilla</label><input type="number" step="0.01" id="fy-floresramilla"></div>
+      <div class="field"><label>% Cuajado</label><input type="number" step="0.01" id="fy-cuajado"></div>
+      <div class="field"><label>Peso fruto (g)</label><input type="number" step="0.1" id="fy-pesofruto"></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnGuardarFilaYema" style="width:100%;">Guardar y usar este dato real</button>
+    </div>
+  </div>
+</div>
+
 <div id="appRoot" style="display:block;">
 <header class="top">
   <div class="inner">
@@ -322,6 +351,12 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
         <div class="curio-dots" id="curioDots"></div>
         <button class="btn btn-secondary btn-sm" id="curioNext">Siguiente →</button>
       </div>
+    </div>
+    <div class="card" id="panelAdminCard" style="display:none;">
+      <h2>📊 Panel resumen (solo admin)</h2>
+      <p class="sub">Visible solo para ti. Un vistazo rápido al estado general del cuaderno.</p>
+      <button class="btn btn-secondary" id="btnExportarTodo">📥 Exportar todo (cuarteles + historial + ficha varietal + cambios)</button>
+      <div id="panelAdminContent"></div>
     </div>
     <div class="card">
       <h2>Portal de carga productiva — por variedad</h2>
@@ -365,6 +400,29 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
             <div class="field">
               <label>Ramillas mixtas por planta</label>
               <input type="number" id="e-ramillas" placeholder="Promedio de tu muestreo">
+            </div>
+            <div class="field">
+              <label>% Exportación</label>
+              <input type="number" id="e-exportacion" placeholder="85" value="85">
+            </div>
+            <div class="field">
+              <label>¿Tienes análisis de yema para este conteo?</label>
+              <select id="e-tieneyema">
+                <option value="no">No — usar datos referenciales</option>
+                <option value="si">Sí — ingresar mis propios datos</option>
+              </select>
+            </div>
+          </div>
+          <div id="e-yemaPropiaWrap" style="display:none;">
+            <p class="sub" style="margin-top:4px;">Ingresa lo que te dio tu propio análisis de yema para esta variedad/cuartel — se usa solo en esta estimación, no reemplaza la Ficha varietal.</p>
+            <div class="grid">
+              <div class="field"><label>Flores / yema</label><input type="number" step="0.01" id="e-yema-floresyema"></div>
+              <div class="field"><label>Yemas / dardo</label><input type="number" step="0.01" id="e-yema-yemasdardo"></div>
+              <div class="field"><label>Flores / dardo <span style="font-weight:400;font-size:10px;color:var(--muted);">(calculado, editable)</span></label><input type="number" step="0.01" id="e-yema-floresdardo"></div>
+              <div class="field"><label>Frutos / dardo <span style="font-weight:400;font-size:10px;color:var(--muted);">(calculado, editable)</span></label><input type="number" step="0.01" id="e-yema-frutosdardo"></div>
+              <div class="field"><label>Flores / ramilla</label><input type="number" step="0.01" id="e-yema-floresramilla"></div>
+              <div class="field"><label>Cuajado</label><input type="number" step="0.01" id="e-yema-cuajado"></div>
+              <div class="field"><label>Peso fruto (g)</label><input type="number" step="0.1" id="e-yema-pesofruto"></div>
             </div>
           </div>
           <button class="btn btn-primary" id="btnEstimar">Calcular estimación</button>
@@ -419,6 +477,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
       <div class="grid">
         <div class="field"><label>Productor / Campo</label><input type="text" id="c-productor" placeholder="Ej: Fundo Los Cerezos"></div>
         <div class="field"><label>Zona</label><input type="text" id="c-zona" placeholder="Ej: Roma, Chimbarongo"></div>
+        <div class="field"><label>Portainjerto</label><input type="text" id="c-portainjerto" placeholder="Ej: Colt" value="Colt"></div>
         <div class="field"><label>Variedad</label><select id="c-variedad"></select></div>
         <div class="field"><label>Año de plantación</label><input type="number" id="c-anioplant" placeholder="2019"></div>
         <div class="field"><label>Nombre del cuartel</label><input type="text" id="c-nombre" placeholder="Ej: Cuartel 4"></div>
@@ -470,6 +529,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
         <div class="grid">
           <div class="field"><label>Productor / Campo</label><input type="text" id="cc-productor" placeholder="Ej: Fundo Los Cerezos"></div>
           <div class="field"><label>Zona</label><input type="text" id="cc-zona" placeholder="Ej: Roma, Chimbarongo"></div>
+          <div class="field"><label>Portainjerto</label><input type="text" id="cc-portainjerto" placeholder="Ej: Colt" value="Colt"></div>
           <div class="field"><label>Variedad</label><select id="cc-variedad"></select></div>
           <div class="field"><label>Año de plantación</label><input type="number" id="cc-anioplant" placeholder="2019"></div>
           <div class="field"><label>Cuartel</label><input type="text" id="cc-nombre" placeholder="Ej: Cuartel 4"></div>
@@ -589,6 +649,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
         <select id="histFiltroTemp"><option value="">Todas las temporadas</option></select>
         <div class="field" style="margin-bottom:0;"><label>Desde</label><input type="date" id="histFiltroDesde"></div>
         <div class="field" style="margin-bottom:0;"><label>Hasta</label><input type="date" id="histFiltroHasta"></div>
+        <button class="btn btn-secondary" id="btnExportarHistorial" style="align-self:flex-end;">📥 Exportar a Excel</button>
       </div>
       <div id="histTableWrap"></div>
     </div>
@@ -598,11 +659,13 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
   <section id="v-estimador" class="view">
     <div class="card">
       <h2>Estimaciones según tus conteos registrados</h2>
-      <p class="sub">Se calculan solas a partir de lo que ya cargaste en "Registrar conteo" — no necesitas volver a escribir nada. Usan el coeficiente <b>calibrado</b> con tu propia cosecha cuando existe; si no, el <b>referencial</b> de la ficha varietal.</p>
+      <p class="sub">Se calculan solas a partir de lo que ya cargaste en "Registrar conteo" — no necesitas volver a escribir nada. Usan el coeficiente <b>calibrado</b> con tu propia cosecha cuando existe; si no, el <b>referencial</b> de la ficha varietal. Si para un cuartel ya tienes un análisis de yema real, actívalo en la columna "Análisis yema" de esa fila.</p>
       <div class="filter-row">
         <select id="estFiltroProductor"><option value="">Todos los productores</option></select>
         <select id="estFiltroVar"><option value="">Todas las variedades</option></select>
         <select id="estFiltroTemp"><option value="">Todas las temporadas</option></select>
+        <div class="field" style="margin-bottom:0;max-width:160px;"><label>% Exportación</label><input type="number" id="estExportacion" value="85" step="1"></div>
+        <button class="btn btn-secondary" id="btnExportarEstimador" style="align-self:flex-end;">📥 Exportar a Excel</button>
       </div>
       <div id="estimacionesHistWrap"></div>
     </div>
@@ -612,7 +675,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
   <section id="v-referencia" class="view">
     <div class="card">
       <h2>Ficha varietal — fertilidad de yemas</h2>
-      <p class="sub">Coeficientes base usados por el estimador.</p>
+      <p class="sub">Coeficientes base usados por el estimador. Estos datos son obtenidos de análisis de yemas realizados en diferentes huertos de la Sexta Región, temporada 2025-2026.</p>
       <div class="note-box">
         <b>Sobre estos valores:</b> corresponden a rangos referenciales generales de agronomía de cerezo en Chile (flores por dardo, cuajado y peso de fruto según antecedentes de campo y bibliografía varietal), no a una serie histórica de 5 temporadas verificada para cada variedad. En <b>Sweet Aryana</b> y <b>Pacific Red</b> —variedades de introducción más reciente y manejo tipo club— la información pública nacional es aún escasa; sus valores están marcados como preliminares. La forma correcta de tener un estimador realmente propio de tu huerto es cargar temporada a temporada tus conteos junto con el kg cosechado real: el sistema calibra automáticamente el coeficiente por variedad con tus datos, y ese coeficiente calibrado siempre prevalece sobre el referencial.
       </div>
@@ -620,6 +683,11 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
       <div class="actions">
         <button class="btn btn-primary" id="btnGuardarRef">💾 Guardar cambios</button>
         <button class="btn btn-secondary" id="btnResetRef">Restaurar valores referenciales por defecto</button>
+        <button class="btn btn-secondary" id="btnVerHistorialFicha">🕒 Ver historial de cambios</button>
+      </div>
+      <div id="historialFichaWrap" style="display:none;margin-top:14px;">
+        <h2 style="font-size:14px;">Historial de cambios (últimos 60)</h2>
+        <div id="historialFichaContent"></div>
       </div>
     </div>
     <div class="card">
@@ -637,21 +705,27 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
     </div>
   </section>
 
-  <footer class="foot">Cuaderno de Dardos — herramienta de apoyo agronómico. Los valores estimados son orientativos y deben validarse con aforo y cosecha real.</footer>
+  <footer class="foot">Cuaderno de Dardos — herramienta de apoyo agronómico. Los valores estimados son orientativos y deben validarse con aforo y cosecha real. <b>v2.0</b></footer>
 </div>
 </div>
 
 <script>
-const VARIEDADES = ["Sweet Aryana","Pacific Red","Santina","Lapins","Regina","Sweet Heart","Bing"];
+const VARIEDADES = ["Sweet Aryana","Pacific Red","Santina","Lapins","Regina","Sweet Heart","Bing","Rainier","Kordia","Skeena","Areko","Nimba","Royal Dawn"];
 
 const REF_DEFAULT = {
-  "Bing":        {frutos_dardo:2.5, frutos_ramilla:6.0, cuajado:0.30, peso_fruto:10.5, preliminar:false, nota:"No autofértil, requiere polinizante (ej. Van, Rainier). Dardos adultos muy productivos pero sensibles a partidura por lluvia."},
-  "Lapins":      {frutos_dardo:3.5, frutos_ramilla:4.5, cuajado:0.35, peso_fruto:12.0, preliminar:false, nota:"Autofértil, carga consistente y confiable año a año. Buen productor incluso en árboles jóvenes."},
-  "Santina":     {frutos_dardo:2.5, frutos_ramilla:5.5, cuajado:0.38, peso_fruto:11.0, preliminar:false, nota:"Autofértil y precoz en entrada en producción. Alta fertilidad de yema; tiende a sobrecarga, vigilar raleo y calibre."},
-  "Regina":      {frutos_dardo:4.0, frutos_ramilla:3.0, cuajado:0.28, peso_fruto:10.0, preliminar:false, nota:"Requiere polinizante. Fertilidad de yema más baja y con mayor alternancia entre temporadas; a cambio, fruta de calibre premium."},
-  "Sweet Heart": {frutos_dardo:2.5, frutos_ramilla:6.0, cuajado:0.32, peso_fruto:11.0, preliminar:false, nota:"Autofértil, floración y cosecha tardía. Fertilidad de yema estable, buena opción de cierre de temporada."},
-  "Pacific Red": {frutos_dardo:2.5, frutos_ramilla:4.0, cuajado:0.30, peso_fruto:11.5, preliminar:true,  nota:"Variedad de introducción más reciente (programa australiano ANA). Antecedentes públicos en Chile aún limitados: calibra estos valores con tus propios registros apenas tengas 2-3 temporadas."},
-  "Sweet Aryana":{frutos_dardo:2.5, frutos_ramilla:4.0, cuajado:0.32, peso_fruto:11.0, preliminar:true,  nota:"Variedad autofértil de introducción reciente / manejo tipo club. Sin serie histórica pública consolidada en Chile: valores preliminares, se recomienda calibración local temprana."}
+  "Bing":        {flores_yema:2.69, yemas_dardo:4.50, flores_ramilla:6.0, cuajado:0.30, peso_fruto:10.5, preliminar:false, nota:"No autofértil, requiere polinizante (ej. Van, Rainier). Dardos adultos muy productivos pero sensibles a partidura por lluvia. Flores/yema y Yemas/dardo actualizados con análisis de yema temporada 25-26 (1 muestra) — sin datos de ramilla propios todavía."},
+  "Lapins":      {flores_yema:2.65, yemas_dardo:5.58, flores_ramilla:9.57, cuajado:0.35, peso_fruto:12.0, preliminar:false, nota:"Autofértil, carga consistente y confiable año a año. Buen productor incluso en árboles jóvenes. Datos actualizados con análisis de yema temporada 25-26 (18 muestras de dardo, 7 de ramilla, varias zonas)."},
+  "Santina":     {flores_yema:2.96, yemas_dardo:5.18, flores_ramilla:15.93, cuajado:0.38, peso_fruto:11.0, preliminar:false, nota:"Autofértil y precoz en entrada en producción. Alta fertilidad de yema; tiende a sobrecarga, vigilar raleo y calibre. Datos actualizados con análisis de yema temporada 25-26 (17 muestras de dardo, 9 de ramilla, varias zonas)."},
+  "Regina":      {flores_yema:3.37, yemas_dardo:6.11, flores_ramilla:19.59, cuajado:0.28, peso_fruto:10.0, preliminar:false, nota:"Requiere polinizante. Fertilidad de yema más baja y con mayor alternancia entre temporadas; a cambio, fruta de calibre premium. Datos actualizados con análisis de yema temporada 25-26 (5 muestras de dardo, 6 de ramilla)."},
+  "Sweet Heart": {flores_yema:2.5, yemas_dardo:1, flores_ramilla:6.0, cuajado:0.32, peso_fruto:11.0, preliminar:false, nota:"Autofértil, floración y cosecha tardía. Fertilidad de yema estable, buena opción de cierre de temporada. Aún sin análisis de yema propio — valores genéricos, calibra apenas tengas datos de esta variedad."},
+  "Pacific Red": {flores_yema:3.65, yemas_dardo:5.00, flores_ramilla:20.17, cuajado:0.30, peso_fruto:11.5, preliminar:true,  nota:"Variedad de introducción más reciente (programa australiano ANA). Datos actualizados con análisis de yema temporada 25-26 (5 muestras de dardo, 5 de ramilla) — % cuajado y peso de fruto siguen siendo referenciales, aún sin verificar a cosecha."},
+  "Sweet Aryana":{flores_yema:3.37, yemas_dardo:5.03, flores_ramilla:11.48, cuajado:0.32, peso_fruto:11.0, preliminar:true,  nota:"Variedad autofértil de introducción reciente / manejo tipo club. Datos actualizados con análisis de yema temporada 25-26 (8 muestras de dardo, 6 de ramilla) — % cuajado y peso de fruto siguen siendo referenciales."},
+  "Rainier":     {flores_yema:2.65, yemas_dardo:5.78, flores_ramilla:10.52, cuajado:0.28, peso_fruto:10.0, preliminar:false, nota:"No autofértil, requiere polinizante. Cereza bicolor (amarilla con rubor rojo), piel sensible. Flores/yema, Yemas/dardo y Flores/ramilla de análisis de yema temporada 25-26 (1 muestra) — % cuajado y peso de fruto son estimaciones genéricas, calibra con tus propios datos."},
+  "Kordia":      {flores_yema:2.97, yemas_dardo:6.38, flores_ramilla:21.90, cuajado:0.28, peso_fruto:11.5, preliminar:false, nota:"No autofértil, requiere polinizante (a menudo se planta junto a Regina). Fruta grande, firme y oscura, cosecha media-tardía. Datos de análisis de yema temporada 25-26 (2 muestras de dardo, 2 de ramilla) — % cuajado y peso de fruto son estimaciones genéricas."},
+  "Skeena":      {flores_yema:4.37, yemas_dardo:6.48, flores_ramilla:35.03, cuajado:0.32, peso_fruto:10.5, preliminar:false, nota:"Autofértil, similar a Lapins/Sweet Heart en manejo. Datos de análisis de yema temporada 25-26 (4 muestras de dardo, 4 de ramilla, Chimbarongo) — % cuajado y peso de fruto son estimaciones genéricas, calibra con tus propios datos."},
+  "Areko":       {flores_yema:4.26, yemas_dardo:6.22, flores_ramilla:33.29, cuajado:0.30, peso_fruto:10.5, preliminar:true,  nota:"Variedad de introducción reciente, sin serie histórica pública consolidada en Chile. Flores/yema, Yemas/dardo y Flores/ramilla de análisis de yema temporada 25-26 (1 muestra) — % cuajado y peso de fruto son estimaciones genéricas, se recomienda calibración local temprana."},
+  "Nimba":       {flores_yema:3.89, yemas_dardo:5.45, flores_ramilla:22.95, cuajado:0.30, peso_fruto:10.5, preliminar:true,  nota:"Variedad de introducción reciente. Datos de análisis de yema temporada 25-26 (4 muestras de dardo, 4 de ramilla, Peumo) — % cuajado y peso de fruto son estimaciones genéricas, se recomienda calibración local temprana."},
+  "Royal Dawn":  {flores_yema:2.89, yemas_dardo:4.97, flores_ramilla:6.0, cuajado:0.30, peso_fruto:10.0, preliminar:true,  nota:"Variedad de introducción reciente, sin serie histórica pública consolidada en Chile. Flores/yema y Yemas/dardo de análisis de yema temporada 25-26 (2 muestras) — sin datos de ramilla propios todavía; % cuajado y peso de fruto son estimaciones genéricas."}
 };
 
 const EDAD_DEFAULT = [
@@ -790,6 +864,32 @@ function huboCambiosCuartel(a, b){
   return campos.some(f => (a[f]||'') !== (b[f]||''));
 }
 
+async function registrarCambioFicha(variedad, campo, valorAnterior, valorNuevo){
+  try{
+    const id = 'h'+Date.now()+Math.random().toString(36).slice(2,7);
+    await db.collection('historialFicha').doc(id).set({
+      id, fecha: new Date().toISOString(), usuario: usuarioActual, correo: correoActual,
+      variedad, campo, valorAnterior: valorAnterior ?? null, valorNuevo: valorNuevo ?? null
+    });
+  }catch(e){ console.error('no se pudo registrar el historial de ficha', e); }
+}
+
+async function renderHistorialFicha(){
+  const cont = $('historialFichaContent');
+  cont.innerHTML = '<div class="empty">Cargando…</div>';
+  try{
+    const snap = await db.collection('historialFicha').orderBy('fecha','desc').limit(60).get();
+    const items = snap.docs.map(d=>d.data());
+    if(items.length===0){ cont.innerHTML = '<div class="empty">Aún no hay cambios registrados.</div>'; return; }
+    cont.innerHTML = items.map(it=>`
+      <div class="user-list-item" style="flex-direction:column;align-items:stretch;gap:2px;">
+        <div style="display:flex;justify-content:space-between;"><b>${it.variedad}</b><span style="color:var(--muted);font-size:11px;">${formatFecha(it.fecha)}</span></div>
+        <div style="font-size:12.5px;">${it.campo}: <span style="color:var(--muted);">${it.valorAnterior}</span> → <b>${it.valorNuevo}</b></div>
+        <div style="font-size:11px;color:var(--muted);">por ${it.usuario||it.correo||'—'}</div>
+      </div>`).join('');
+  }catch(e){ cont.innerHTML = '<div class="empty">No se pudo cargar el historial (puede requerir crear un índice en Firestore la primera vez — revisa la consola).</div>'; }
+}
+
 function densidadDe(cuartel){
   if(!cuartel) return null;
   if(cuartel.densidadmanual) return parseFloat(cuartel.densidadmanual);
@@ -829,9 +929,10 @@ function factorEdad(anioPlant, temporada){
 function coefBase(variedad){
   const r = REF[variedad];
   if(!r) return {dardo:0,ramilla:0};
+  const floresDardo = r.flores_yema * r.yemas_dardo;
   return {
-    dardo: r.frutos_dardo * r.cuajado * r.peso_fruto/1000,
-    ramilla: r.frutos_ramilla * r.cuajado * r.peso_fruto/1000
+    dardo: floresDardo * r.cuajado * r.peso_fruto/1000,
+    ramilla: r.flores_ramilla * r.cuajado * r.peso_fruto/1000
   };
 }
 
@@ -909,7 +1010,7 @@ function isActivo(c){ return c.activo !== false; }
 async function renderListaCuarteles(){
   const cuarteles = await listCuarteles();
   if(cuarteles.length===0){ $('listaCuartelesWrap').innerHTML = '<div class="empty">Aún no has creado ningún cuartel.</div>'; return; }
-  let html = '<table><thead><tr><th>Nombre</th><th>Productor</th><th>Zona</th><th>Variedad</th><th>Año plant.</th><th>Hectáreas</th><th>Densidad aprox.</th><th>Estado</th><th></th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Nombre</th><th>Productor</th><th>Zona</th><th>Variedad</th><th>Portainjerto</th><th>Año plant.</th><th>Hectáreas</th><th>Densidad aprox.</th><th>Estado</th><th></th></tr></thead><tbody>';
   cuarteles.forEach(c=>{
     const dens = densidadDe(c);
     const activo = isActivo(c);
@@ -918,6 +1019,7 @@ async function renderListaCuarteles(){
       <td class="txt">${c.productor||'—'}</td>
       <td class="txt">${c.zona||'—'}</td>
       <td class="txt">${c.variedad}</td>
+      <td class="txt">${c.portainjerto||'—'}</td>
       <td>${c.anioplant||'—'}</td>
       <td>${c.hectareas||'—'}</td>
       <td>${dens? dens+' pl/ha':'—'}</td>
@@ -946,7 +1048,7 @@ window.cargarCuartelParaEditar = async (id)=>{
   if(!c) return;
   cuartelActualId = c.id;
   $('pickCuartel').value = c.id;
-  $('c-productor').value=c.productor||''; $('c-zona').value=c.zona||''; $('c-variedad').value=c.variedad; $('c-anioplant').value=c.anioplant||'';
+  $('c-productor').value=c.productor||''; $('c-zona').value=c.zona||''; $('c-portainjerto').value=c.portainjerto||'Colt'; $('c-variedad').value=c.variedad; $('c-anioplant').value=c.anioplant||'';
   $('c-nombre').value=c.nombre||''; $('c-hectareas').value=c.hectareas||''; $('c-disthilera').value=c.disthilera||'';
   $('c-distplanta').value=c.distplanta||''; $('c-densidadmanual').value=c.densidadmanual||'';
   actualizarSugerencia();
@@ -996,6 +1098,7 @@ $('btnGuardarCuartel')?.addEventListener('click', async ()=>{
     id,
     productor: $('c-productor').value.trim(),
     zona: $('c-zona').value.trim(),
+    portainjerto: $('c-portainjerto').value.trim(),
     variedad: $('c-variedad').value,
     anioplant: $('c-anioplant').value,
     nombre,
@@ -1046,7 +1149,7 @@ $('pickCuartelConteo')?.addEventListener('change', async (e)=>{
   const c = await getCuartel(id);
   if(!c) return;
   cuartelActualId = c.id;
-  $('cc-productor').value=c.productor||''; $('cc-zona').value=c.zona||''; $('cc-variedad').value=c.variedad; $('cc-anioplant').value=c.anioplant||'';
+  $('cc-productor').value=c.productor||''; $('cc-zona').value=c.zona||''; $('cc-portainjerto').value=c.portainjerto||'Colt'; $('cc-variedad').value=c.variedad; $('cc-anioplant').value=c.anioplant||'';
   $('cc-nombre').value=c.nombre||''; $('cc-hectareas').value=c.hectareas||''; $('cc-disthilera').value=c.disthilera||'';
   $('cc-distplanta').value=c.distplanta||''; $('cc-densidadmanual').value=c.densidadmanual||'';
   actualizarSugerencia2();
@@ -1232,10 +1335,45 @@ $('btnSeguirContando')?.addEventListener('click', ()=>{
   $('cstep-3').classList.add('active');
 });
 
+async function calcularPromedioVariedad(variedad){
+  const conteos = await listConteos();
+  const cuarteles = await listCuarteles();
+  const cMap = {}; cuarteles.forEach(c=>cMap[c.id]=c);
+  let sumaD=0, sumaR=0, n=0;
+  conteos.forEach(c=>{
+    const cu = cMap[c.cuartelId];
+    if(!cu || cu.variedad!==variedad) return;
+    (c.muestras||[]).forEach(m=>{
+      sumaD += parseFloat(m.dardos)||0;
+      sumaR += parseFloat(m.ramillas)||0;
+      n++;
+    });
+  });
+  if(n<5) return null; // muestra insuficiente todavía para comparar con confianza
+  return { dardos: sumaD/n, ramillas: sumaR/n, n };
+}
+
 $('btnConfirmarConteo')?.addEventListener('click', async ()=>{
   const hilera = $('m-hilera').value, planta = $('m-planta').value;
   const dTot = entradasActuales.filter(e=>e.tipo==='dardos').reduce((s,e)=>s+e.valor,0);
   const rTot = entradasActuales.filter(e=>e.tipo==='ramillas').reduce((s,e)=>s+e.valor,0);
+
+  const cuActual = await getCuartel(cuartelActualId);
+  if(cuActual){
+    const prom = await calcularPromedioVariedad(cuActual.variedad);
+    if(prom){
+      const dFuera = prom.dardos>0 && (dTot > prom.dardos*1.8 || dTot < prom.dardos*0.5);
+      const rFuera = prom.ramillas>0 && (rTot > prom.ramillas*1.8 || rTot < prom.ramillas*0.5);
+      if(dFuera || rFuera){
+        const msg = `⚠️ Este valor se ve muy distinto al promedio de tus conteos anteriores para ${cuActual.variedad} (basado en ${prom.n} plantas):\n`
+          + `Dardos: ingresaste ${dTot}, promedio ${prom.dardos.toFixed(1)}\n`
+          + `Ramillas: ingresaste ${rTot}, promedio ${prom.ramillas.toFixed(1)}\n\n`
+          + `¿Seguro que quieres guardarlo así? (Cancelar para revisar el conteo de esta planta)`;
+        if(!confirm(msg)) return;
+      }
+    }
+  }
+
   const muestra = {hilera, planta, dardos: dTot, ramillas: rTot, entradas: [...entradasActuales]};
   if(editandoMuestraIndex!==null){ muestrasTemp[editandoMuestraIndex] = muestra; editandoMuestraIndex = null; }
   else { muestrasTemp.push(muestra); }
@@ -1270,7 +1408,7 @@ async function actualizarResumenCuartel(){
   if(!cu) return;
   const dens = densidadDe(cu);
   const sug = sugerirPlantas(parseFloat(cu.hectareas), dens);
-  $('resumenCuartelTxt').innerHTML = `<b>${cu.nombre}</b> · ${cu.variedad} · ${cu.productor||'sin productor'}${cu.zona? ' · zona '+cu.zona : ''} · ${cu.hectareas||'?'} ha${dens?' · densidad aprox. '+dens+' pl/ha':''}${sug?' · meta sugerida: '+sug+' plantas':''}`;
+  $('resumenCuartelTxt').innerHTML = `<b>${cu.nombre}</b> · ${cu.variedad}${cu.portainjerto? '/'+cu.portainjerto : ''} · ${cu.productor||'sin productor'}${cu.zona? ' · zona '+cu.zona : ''} · ${cu.hectareas||'?'} ha${dens?' · densidad aprox. '+dens+' pl/ha':''}${sug?' · meta sugerida: '+sug+' plantas':''}`;
 }
 
 $('btnPaso1Continuar')?.addEventListener('click', async ()=>{
@@ -1283,6 +1421,7 @@ $('btnPaso1Continuar')?.addEventListener('click', async ()=>{
     id: idCu,
     productor: $('cc-productor').value.trim(),
     zona: $('cc-zona').value.trim(),
+    portainjerto: $('cc-portainjerto').value.trim(),
     variedad: $('cc-variedad').value,
     anioplant: $('cc-anioplant').value,
     nombre,
@@ -1358,7 +1497,7 @@ async function abrirTabConteo(){
     $('editandoPlantaAviso').style.display='none';
     const cu = await getCuartel(cuartelActualId);
     if(cu){
-      $('cc-productor').value=cu.productor||''; $('cc-zona').value=cu.zona||''; $('cc-variedad').value=cu.variedad; $('cc-anioplant').value=cu.anioplant||'';
+      $('cc-productor').value=cu.productor||''; $('cc-zona').value=cu.zona||''; $('cc-portainjerto').value=cu.portainjerto||'Colt'; $('cc-variedad').value=cu.variedad; $('cc-anioplant').value=cu.anioplant||'';
       $('cc-nombre').value=cu.nombre||''; $('cc-hectareas').value=cu.hectareas||''; $('cc-disthilera').value=cu.disthilera||'';
       $('cc-distplanta').value=cu.distplanta||''; $('cc-densidadmanual').value=cu.densidadmanual||'';
       $('pickCuartelConteo').value = cu.id;
@@ -1438,7 +1577,7 @@ async function editarConteo(id){
   $('editandoPlantaAviso').style.display='none';
   const cu = await getCuartel(cuartelActualId);
   if(cu){
-    $('cc-productor').value=cu.productor||''; $('cc-zona').value=cu.zona||''; $('cc-variedad').value=cu.variedad; $('cc-anioplant').value=cu.anioplant||'';
+    $('cc-productor').value=cu.productor||''; $('cc-zona').value=cu.zona||''; $('cc-portainjerto').value=cu.portainjerto||'Colt'; $('cc-variedad').value=cu.variedad; $('cc-anioplant').value=cu.anioplant||'';
     $('cc-nombre').value=cu.nombre||''; $('cc-hectareas').value=cu.hectareas||''; $('cc-disthilera').value=cu.disthilera||'';
     $('cc-distplanta').value=cu.distplanta||''; $('cc-densidadmanual').value=cu.densidadmanual||'';
     $('pickCuartelConteo').value = cu.id;
@@ -1467,7 +1606,7 @@ async function renderHistorial(){
     const n = (c.muestras||[]).length;
     const dardosTot = (c.muestras||[]).reduce((s,m)=>s+(parseFloat(m.dardos)||0),0);
     const ramillasTot = (c.muestras||[]).reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0);
-    return {...c, cuartelNombre:cu.nombre||'—', variedad:cu.variedad||'—', n, dardosTot, ramillasTot};
+    return {...c, cuartelNombre:cu.nombre||'—', variedad:cu.variedad||'—', zona:cu.zona||'—', productor:cu.productor||'—', n, dardosTot, ramillasTot};
   });
 
   const fVar = $('histFiltroVar'), fTemp = $('histFiltroTemp'), fDesde = $('histFiltroDesde'), fHasta = $('histFiltroHasta');
@@ -1476,6 +1615,7 @@ async function renderHistorial(){
   fVar.innerHTML = '<option value="">Todas las variedades</option>' + vars.map(v=>`<option>${v}</option>`).join('');
   fTemp.innerHTML = '<option value="">Todas las temporadas</option>' + temps.map(t=>`<option>${t}</option>`).join('');
 
+  let filtActual = [];
   const draw = ()=>{
     const selV = fVar.value, selT = fTemp.value, desde = fDesde.value, hasta = fHasta.value;
     const filt = enriched.filter(r=>
@@ -1484,6 +1624,7 @@ async function renderHistorial(){
       (!desde || (r.fecha && r.fecha>=desde)) &&
       (!hasta || (r.fecha && r.fecha<=hasta))
     );
+    filtActual = filt;
     if(filt.length===0){ $('histTableWrap').innerHTML = '<div class="empty">Aún no hay labores para este filtro. Ve a "Registrar conteo" para agregar la primera.</div>'; return; }
     let html = '<table><thead><tr><th>Fecha</th><th>Temporada</th><th>Cuartel</th><th>Variedad</th><th>Registrado por</th><th>Plantas</th><th>Dardos tot.</th><th>Ramillas tot.</th><th>Kg real</th><th></th></tr></thead><tbody>';
     filt.forEach(r=>{
@@ -1504,6 +1645,26 @@ async function renderHistorial(){
     $('histTableWrap').innerHTML = html;
   };
   fVar.onchange = draw; fTemp.onchange = draw; fDesde.onchange = draw; fHasta.onchange = draw;
+  $('btnExportarHistorial')?.addEventListener('click', ()=>{
+    if(filtActual.length===0){ alert('No hay datos para exportar con este filtro.'); return; }
+    exportarExcel('historial_cuaderno_dardos.xlsx', [{
+      nombre: 'Historial',
+      columnas: [
+        {header:'Fecha', key:'fecha'},
+        {header:'Temporada', key:'temporada'},
+        {header:'Zona', key:'zona'},
+        {header:'Productor', key:'productor'},
+        {header:'Cuartel', key:'cuartelNombre'},
+        {header:'Variedad', key:'variedad'},
+        {header:'Registrado por', key: r=>r.usuario||r.responsable||''},
+        {header:'Plantas', key:'n'},
+        {header:'Dardos totales', key:'dardosTot'},
+        {header:'Ramillas totales', key:'ramillasTot'},
+        {header:'Kg real', key: r=>r.kgreal||''}
+      ],
+      filas: filtActual
+    }]);
+  });
   draw();
 }
 
@@ -1548,6 +1709,125 @@ async function renderInicio(){
   const cMap = {}; cuarteles.forEach(c=>cMap[c.id]=c);
   await renderPortal(conteos, cuarteles, cMap);
   calcularSimuladorMargen();
+  if(correoActual === ADMIN_EMAIL){
+    $('panelAdminCard').style.display = 'block';
+    await renderPanelAdmin(conteos, cuarteles, cMap);
+  } else {
+    $('panelAdminCard').style.display = 'none';
+  }
+}
+
+async function exportarTodo(){
+  if(correoActual !== ADMIN_EMAIL){ alert('Solo el usuario administrador puede exportar todo.'); return; }
+  const conteos = await listConteos();
+  const cuarteles = await listCuarteles();
+  const cMap = {}; cuarteles.forEach(c=>cMap[c.id]=c);
+
+  const hojaCuarteles = {
+    nombre: 'Cuarteles',
+    columnas: [
+      {header:'Nombre', key:'nombre'}, {header:'Productor', key:'productor'}, {header:'Zona', key:'zona'},
+      {header:'Portainjerto', key:'portainjerto'}, {header:'Variedad', key:'variedad'}, {header:'Año plant.', key:'anioplant'},
+      {header:'Hectáreas', key:'hectareas'}, {header:'Densidad aprox.', key: c=>densidadDe(c)||''},
+      {header:'Estado', key: c=>isActivo(c)?'activo':'archivado'}, {header:'Creado por', key: c=>c.creadoPorNombre||c.creadoPor||''}
+    ],
+    filas: cuarteles
+  };
+
+  const historialFilas = conteos.map(c=>{
+    const cu = cMap[c.cuartelId] || {};
+    const n = (c.muestras||[]).length;
+    const dardosTot = (c.muestras||[]).reduce((s,m)=>s+(parseFloat(m.dardos)||0),0);
+    const ramillasTot = (c.muestras||[]).reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0);
+    return {fecha:c.fecha||'', temporada:c.temporada||'', zona:cu.zona||'', productor:cu.productor||'', cuartel:cu.nombre||'',
+      variedad:cu.variedad||'', registradoPor:c.usuario||c.responsable||'', plantas:n, dardosTot, ramillasTot, kgReal:c.kgreal||''};
+  });
+  const hojaHistorial = {
+    nombre: 'Historial',
+    columnas: [
+      {header:'Fecha', key:'fecha'}, {header:'Temporada', key:'temporada'}, {header:'Zona', key:'zona'},
+      {header:'Productor', key:'productor'}, {header:'Cuartel', key:'cuartel'}, {header:'Variedad', key:'variedad'},
+      {header:'Registrado por', key:'registradoPor'}, {header:'Plantas', key:'plantas'},
+      {header:'Dardos totales', key:'dardosTot'}, {header:'Ramillas totales', key:'ramillasTot'}, {header:'Kg real', key:'kgReal'}
+    ],
+    filas: historialFilas
+  };
+
+  const fichaFilas = VARIEDADES.map(v=>{
+    const r = REF[v] || REF_DEFAULT[v] || {};
+    return {variedad:v, flores_yema:r.flores_yema, yemas_dardo:r.yemas_dardo, flores_dardo: (parseFloat(r.flores_yema)||0)*(parseFloat(r.yemas_dardo)||0),
+      flores_ramilla:r.flores_ramilla, cuajado:r.cuajado, peso_fruto:r.peso_fruto, preliminar: r.preliminar?'sí':'no', nota:r.nota||''};
+  });
+  const hojaFicha = {
+    nombre: 'FichaVarietal',
+    columnas: [
+      {header:'Variedad', key:'variedad'}, {header:'Flores/yema', key:'flores_yema'}, {header:'Yemas/dardo', key:'yemas_dardo'},
+      {header:'Flores/dardo', key:'flores_dardo'}, {header:'Flores/ramilla', key:'flores_ramilla'}, {header:'Cuajado', key:'cuajado'},
+      {header:'Peso fruto (g)', key:'peso_fruto'}, {header:'Preliminar', key:'preliminar'}, {header:'Nota', key:'nota'}
+    ],
+    filas: fichaFilas
+  };
+
+  let cambiosFilas = [];
+  try{
+    const snap = await db.collection('historialFicha').orderBy('fecha','desc').limit(500).get();
+    cambiosFilas = snap.docs.map(d=>d.data());
+  }catch(e){ /* si falla, la hoja queda vacía */ }
+  const hojaCambios = {
+    nombre: 'HistorialCambiosFicha',
+    columnas: [
+      {header:'Fecha', key:'fecha'}, {header:'Usuario', key:'usuario'}, {header:'Correo', key:'correo'},
+      {header:'Variedad', key:'variedad'}, {header:'Campo', key:'campo'}, {header:'Valor anterior', key:'valorAnterior'}, {header:'Valor nuevo', key:'valorNuevo'}
+    ],
+    filas: cambiosFilas
+  };
+
+  exportarExcel('cuaderno_de_dardos_completo.xlsx', [hojaCuarteles, hojaHistorial, hojaFicha, hojaCambios]);
+}
+$('btnExportarTodo')?.addEventListener('click', exportarTodo);
+
+async function renderPanelAdmin(conteos, cuarteles, cMap){
+  // 1) Hectáreas totales por zona (solo cuarteles activos)
+  const haPorZona = {};
+  cuarteles.filter(isActivo).forEach(c=>{
+    const z = c.zona && c.zona.trim() ? c.zona.trim() : 'Sin zona registrada';
+    haPorZona[z] = (haPorZona[z]||0) + (parseFloat(c.hectareas)||0);
+  });
+  const zonasHtml = Object.keys(haPorZona).sort().map(z=>
+    `<div class="user-list-item"><span>${z}</span><span><b>${haPorZona[z].toFixed(1)} ha</b></span></div>`
+  ).join('') || '<div class="empty">Sin cuarteles activos con zona registrada.</div>';
+
+  // 2) Cuarteles activos sin conteo en la temporada más reciente detectada
+  const temporadas = [...new Set(conteos.map(c=>c.temporada).filter(Boolean))].sort();
+  const tempReciente = temporadas[temporadas.length-1];
+  const cuartelesConConteoEnTemp = new Set(
+    conteos.filter(c=>c.temporada===tempReciente).map(c=>c.cuartelId)
+  );
+  const cuartelesActivos = cuarteles.filter(isActivo);
+  const sinContar = cuartelesActivos.filter(c=>!cuartelesConConteoEnTemp.has(c.id));
+  const sinContarHtml = sinContar.length===0
+    ? '<div class="empty">Todos tus cuarteles activos ya tienen al menos un conteo esta temporada. 🎉</div>'
+    : sinContar.map(c=>`<div class="user-list-item"><span>${c.nombre} · ${c.variedad} ${c.zona?'· '+c.zona:''}</span><span>${c.productor||'—'}</span></div>`).join('');
+
+  // 3) Última actividad de cada usuario
+  let usuariosHtml = '<div class="empty">No se pudo cargar la actividad de usuarios.</div>';
+  try{
+    const snap = await db.collection('usuarios').get();
+    const usuarios = snap.docs.map(d=>({uid:d.id, ...d.data()}));
+    usuarios.sort((a,b)=> (b.ultimoAcceso||'').localeCompare(a.ultimoAcceso||''));
+    usuariosHtml = usuarios.map(u=>
+      `<div class="user-list-item"><span>🧑‍🌾 ${u.nombre||u.correo}</span><span>${formatFecha(u.ultimoAcceso)}</span></div>`
+    ).join('') || '<div class="empty">No hay usuarios creados.</div>';
+  }catch(e){}
+
+  $('panelAdminContent').innerHTML = `
+    <h2 style="font-size:14px;margin-top:10px;">Hectáreas activas por zona</h2>
+    ${zonasHtml}
+    <h2 style="font-size:14px;margin-top:18px;">Cuarteles activos sin conteo en la temporada ${tempReciente||'(sin datos aún)'}</h2>
+    ${sinContarHtml}
+    <h2 style="font-size:14px;margin-top:18px;">Último acceso por usuario</h2>
+    ${usuariosHtml}
+  `;
 }
 
 async function calcularResumenGrupo(conteosGrupo, cuartelesAll, conteosAll, coefCache){
@@ -1632,15 +1912,20 @@ function renderReferencia(){
   const editable = correoActual === ADMIN_EMAIL;
   let html='';
   VARIEDADES.forEach(v=>{
-    const r = REF[v];
+    const r = REF[v] || REF_DEFAULT[v] || {flores_yema:0,yemas_dardo:0,flores_ramilla:0,cuajado:0,peso_fruto:0,preliminar:true,nota:'Sin datos cargados.'};
     const campo = (campo, valor) => editable
       ? `<input data-v="${v}" data-f="${campo}" value="${valor}" style="width:70px">`
       : `<span>${valor}</span>`;
+    const floresDardoCalc = (parseFloat(r.flores_yema)||0) * (parseFloat(r.yemas_dardo)||0);
+    const frutosDardoCalc = floresDardoCalc * (parseFloat(r.cuajado)||0);
     html += `<div class="varcard${r.preliminar?' varcard-preliminar':''}">
       <div class="vname">🍒 ${v} <span class="badge ${r.preliminar?'badge-preliminar':'badge-referencial'}">${r.preliminar?'⚠️ preliminar':'referencial'}</span></div>
       <div class="vmeta">
-        <div>Frutos / dardo<span>${campo('frutos_dardo', r.frutos_dardo)}</span></div>
-        <div>Frutos / ramilla<span>${campo('frutos_ramilla', r.frutos_ramilla)}</span></div>
+        <div>Flores / yema<span>${campo('flores_yema', r.flores_yema)}</span></div>
+        <div>Yemas / dardo<span>${campo('yemas_dardo', r.yemas_dardo)}</span></div>
+        <div>Flores / dardo <span style="font-weight:400;font-size:10px;color:var(--muted);">(calculado)</span><span>${floresDardoCalc.toFixed(2)}</span></div>
+        <div>Frutos / dardo <span style="font-weight:400;font-size:10px;color:var(--muted);">(calculado)</span><span>${frutosDardoCalc.toFixed(2)}</span></div>
+        <div>Flores / ramilla<span>${campo('flores_ramilla', r.flores_ramilla)}</span></div>
         <div>Cuajado<span>${campo('cuajado', r.cuajado)}</span></div>
         <div>Peso fruto (g)<span>${campo('peso_fruto', r.peso_fruto)}</span></div>
       </div>
@@ -1653,9 +1938,13 @@ function renderReferencia(){
     document.querySelectorAll('#varCards input').forEach(inp=>{
       inp.addEventListener('change', async ()=>{
         const v=inp.dataset.v, f=inp.dataset.f;
-        REF[v][f] = parseFloat(inp.value)||0;
+        const valorAnterior = REF[v][f];
+        const valorNuevo = parseFloat(inp.value)||0;
+        REF[v][f] = valorNuevo;
         const ok = await safeSet('referencia-varietal', REF);
         if(!ok) alert('⚠️ No se pudo guardar este cambio. Revisa tu conexión e inténtalo de nuevo, o usa el botón "Guardar cambios".');
+        else registrarCambioFicha(v, f, valorAnterior, valorNuevo);
+        if(f==='flores_yema' || f==='yemas_dardo' || f==='cuajado') renderReferencia();
       });
     });
   }
@@ -1672,9 +1961,13 @@ function renderReferencia(){
   if(editable){
     document.querySelectorAll('#edadTableWrap input').forEach(inp=>{
       inp.addEventListener('change', async ()=>{
-        EDAD[inp.dataset.idx].factor = parseFloat(inp.value)||0;
+        const idx = inp.dataset.idx;
+        const valorAnterior = EDAD[idx].factor;
+        const valorNuevo = parseFloat(inp.value)||0;
+        EDAD[idx].factor = valorNuevo;
         const ok = await safeSet('factor-edad', EDAD);
         if(!ok) alert('⚠️ No se pudo guardar este cambio. Revisa tu conexión e inténtalo de nuevo, o usa el botón "Guardar cambios".');
+        else registrarCambioFicha('Factor de edad', EDAD[idx].etiqueta || `rango ${idx}`, valorAnterior, valorNuevo);
       });
     });
   }
@@ -1689,33 +1982,52 @@ function renderReferencia(){
 }
 
 /* ---------- ESTIMACIONES AUTOMÁTICAS DESDE EL HISTORIAL ---------- */
-async function calcularEstimacionConteo(c, cu, calibradoPre){
+async function calcularEstimacionConteo(c, cu, calibradoPre, baseOverride){
   if(!c.muestras || c.muestras.length===0 || !cu) return null;
   const n = c.muestras.length;
   const dardosProm = c.muestras.reduce((s,m)=>s+(parseFloat(m.dardos)||0),0)/n;
   const ramillasProm = c.muestras.reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0)/n;
   const densidad = densidadDe(cu);
   const fe = factorEdad(cu.anioplant, c.temporada);
-  const base = coefBase(cu.variedad);
-  const calibrado = calibradoPre!==undefined ? calibradoPre : await coefCalibrado(cu.variedad);
   let kgPlanta, fuente;
-  if(calibrado){
-    kgPlanta = (dardosProm + 0.5*ramillasProm)*fe*calibrado;
-    fuente = 'calibrado';
+  if(baseOverride){
+    kgPlanta = (dardosProm*baseOverride.dardo + ramillasProm*baseOverride.ramilla)*fe;
+    fuente = 'propio';
   } else {
-    kgPlanta = (dardosProm*base.dardo + ramillasProm*base.ramilla)*fe;
-    fuente = 'referencial';
+    const base = coefBase(cu.variedad);
+    const calibrado = calibradoPre!==undefined ? calibradoPre : await coefCalibrado(cu.variedad);
+    if(calibrado){
+      kgPlanta = (dardosProm + 0.5*ramillasProm)*fe*calibrado;
+      fuente = 'calibrado';
+    } else {
+      kgPlanta = (dardosProm*base.dardo + ramillasProm*base.ramilla)*fe;
+      fuente = 'referencial';
+    }
   }
   const kgHa = densidad ? kgPlanta*densidad : null;
   return {dardosProm, ramillasProm, densidad, fe, kgPlanta, kgHa, fuente};
+}
+
+function exportarExcel(nombreArchivo, hojas){
+  if(typeof XLSX === 'undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión e inténtalo de nuevo.'); return; }
+  const wb = XLSX.utils.book_new();
+  hojas.forEach(h=>{
+    const aoa = [h.columnas.map(c=>c.header)];
+    h.filas.forEach(f=> aoa.push(h.columnas.map(c=> typeof c.key==='function' ? c.key(f) : (f[c.key] ?? ''))));
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.book_append_sheet(wb, ws, h.nombre.slice(0,31));
+  });
+  XLSX.writeFile(wb, nombreArchivo);
 }
 
 async function renderEstimacionesHistorial(){
   const conteos = await listConteos();
   const cuarteles = await listCuarteles();
   const cMap = {}; cuarteles.forEach(c=>cMap[c.id]=c);
+  window.__estConteosCache = conteos;
+  window.__estCuartelesCache = cMap;
 
-  const fVar = $('estFiltroVar'), fTemp = $('estFiltroTemp'), fProd = $('estFiltroProductor');
+  const fVar = $('estFiltroVar'), fTemp = $('estFiltroTemp'), fProd = $('estFiltroProductor'), fExport = $('estExportacion');
   const vars = [...new Set(cuarteles.map(c=>c.variedad))];
   const temps = [...new Set(conteos.map(c=>c.temporada))];
   const prods = [...new Set(cuarteles.map(c=>c.productor).filter(Boolean))];
@@ -1725,20 +2037,35 @@ async function renderEstimacionesHistorial(){
 
   const draw = async ()=>{
     const selV = fVar.value, selT = fTemp.value, selP = fProd.value;
+    const pctExport = parseFloat(fExport.value)||0;
     const filt = conteos.filter(c=>{
       const cu = cMap[c.cuartelId];
       return cu && (!selV||cu.variedad===selV) && (!selT||c.temporada===selT) && (!selP||cu.productor===selP);
     });
     if(filt.length===0){ $('estimacionesHistWrap').innerHTML = '<div class="empty">Aún no hay conteos registrados para este filtro. Ve a "Registrar conteo" para cargar el primero.</div>'; return; }
-    let html = '<table><thead><tr><th>Fecha</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Temporada</th><th>Dardos/pl.</th><th>Ramillas/pl.</th><th>Kg/planta est.</th><th>Kg/ha est.</th><th>Coef.</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Fecha</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Temporada</th><th>Dardos/pl.</th><th>Ramillas/pl.</th><th>Kg/planta est.</th><th>Kg/ha bruto</th><th>Kg/ha exportable</th><th>Análisis yema</th><th>Coef.</th></tr></thead><tbody>';
     const coefCache = {};
+    const exportRows = [];
     for(const c of filt){
       const cu = cMap[c.cuartelId];
-      if(!(cu.variedad in coefCache)){
+      const tieneYemaFila = !!(c.analisisYema && c.analisisYema.activo);
+      let baseOverride = null;
+      if(tieneYemaFila){
+        const ay = c.analisisYema;
+        baseOverride = { dardo: (parseFloat(ay.frutos_dardo)||0)*(parseFloat(ay.peso_fruto)||0)/1000, ramilla: (parseFloat(ay.flores_ramilla)||0)*(parseFloat(ay.cuajado)||0)*(parseFloat(ay.peso_fruto)||0)/1000 };
+      }
+      if(!baseOverride && !(cu.variedad in coefCache)){
         coefCache[cu.variedad] = await coefCalibrado(cu.variedad, cuarteles, conteos);
       }
-      const est = await calcularEstimacionConteo(c, cu, coefCache[cu.variedad]);
+      const est = await calcularEstimacionConteo(c, cu, coefCache[cu.variedad], baseOverride);
       if(!est) continue;
+      const kgHaExport = est.kgHa!=null ? est.kgHa*(pctExport/100) : null;
+      const esReal = est.fuente==='propio';
+      const badgeTxt = esReal ? 'real' : (est.fuente==='calibrado' ? 'calibrado' : 'referencial');
+      const badgeClass = esReal ? 'badge-real' : (est.fuente==='calibrado' ? 'badge-calibrado' : 'badge-referencial');
+      exportRows.push({fecha:c.fecha||'', productor:cu.productor||'', zona:cu.zona||'', cuartel:cu.nombre, variedad:cu.variedad, temporada:c.temporada,
+        dardosProm:est.dardosProm.toFixed(1), ramillasProm:est.ramillasProm.toFixed(1), kgPlanta:est.kgPlanta.toFixed(1),
+        kgHa: est.kgHa!=null? est.kgHa.toFixed(0):'', kgHaExport: kgHaExport!=null? kgHaExport.toFixed(0):'', coef: badgeTxt});
       html += `<tr>
         <td class="txt">${c.fecha||'—'}</td>
         <td class="txt">${cu.productor||'—'}</td>
@@ -1749,15 +2076,96 @@ async function renderEstimacionesHistorial(){
         <td>${est.ramillasProm.toFixed(1)}</td>
         <td>${est.kgPlanta.toFixed(1)}</td>
         <td>${est.kgHa? est.kgHa.toFixed(0) : '<span title="Falta densidad del cuartel">s/d</span>'}</td>
-        <td><span class="badge ${est.fuente==='calibrado'?'badge-calibrado':'badge-referencial'}">${est.fuente==='calibrado'?'calibrado':'referencial'}</span></td>
+        <td>${kgHaExport!=null? kgHaExport.toFixed(0) : 's/d'}</td>
+        <td><select onchange="onToggleAnalisisYemaFila('${c.id}', this.value)">
+          <option value="no" ${!tieneYemaFila?'selected':''}>No</option>
+          <option value="si" ${tieneYemaFila?'selected':''}>Sí</option>
+        </select></td>
+        <td><span class="badge ${badgeClass}">${badgeTxt}</span></td>
       </tr>`;
     }
     html += '</tbody></table>';
     $('estimacionesHistWrap').innerHTML = html;
+    window.__estExportRows = exportRows;
   };
-  fVar.onchange = draw; fTemp.onchange = draw; fProd.onchange = draw;
+  window.__estDrawFn = draw;
+  $('btnExportarEstimador')?.addEventListener('click', ()=>{
+    const rows = window.__estExportRows || [];
+    if(rows.length===0){ alert('No hay datos para exportar con este filtro.'); return; }
+    exportarExcel('estimador_cuaderno_dardos.xlsx', [{
+      nombre: 'Estimador',
+      columnas: [
+        {header:'Fecha', key:'fecha'}, {header:'Productor', key:'productor'}, {header:'Zona', key:'zona'},
+        {header:'Cuartel', key:'cuartel'}, {header:'Variedad', key:'variedad'}, {header:'Temporada', key:'temporada'},
+        {header:'Dardos/planta', key:'dardosProm'}, {header:'Ramillas/planta', key:'ramillasProm'},
+        {header:'Kg/planta', key:'kgPlanta'}, {header:'Kg/ha bruto', key:'kgHa'}, {header:'Kg/ha exportable', key:'kgHaExport'},
+        {header:'Coeficiente', key:'coef'}
+      ],
+      filas: rows
+    }]);
+  });
+  fVar.onchange = draw; fTemp.onchange = draw; fProd.onchange = draw; fExport.oninput = draw;
   draw();
 }
+
+function recalcModalYema(){
+  const yd = parseFloat($('fy-yemasdardo').value)||0;
+  const fy = parseFloat($('fy-floresyema').value)||0;
+  const cuaj = parseFloat($('fy-cuajado').value)||0;
+  const floresDardo = yd*fy;
+  $('fy-floresdardo').value = floresDardo.toFixed(2);
+  $('fy-frutosdardo').value = (floresDardo*cuaj).toFixed(2);
+}
+['fy-yemasdardo','fy-floresyema','fy-cuajado'].forEach(id=>{
+  $(id)?.addEventListener('input', recalcModalYema);
+});
+
+window.onToggleAnalisisYemaFila = async (conteoId, valor)=>{
+  const cMap = window.__estCuartelesCache || {};
+  const conteo = await getConteo(conteoId);
+  if(!conteo) return;
+  if(valor==='no'){
+    if(conteo.analisisYema){ conteo.analisisYema.activo = false; await saveConteo(conteo); }
+    if(window.__estDrawFn) window.__estDrawFn();
+    return;
+  }
+  // valor === 'si' -> abrir modal para ingresar/editar el dato real
+  const cu = cMap[conteo.cuartelId] || {};
+  const r = REF[cu.variedad] || {};
+  const ay = conteo.analisisYema || {};
+  $('modalYemaSub').textContent = `Cuartel "${cu.nombre||''}" · ${cu.variedad||''} — ingresa lo que te dio el análisis de yema real. Se usa solo para este cuartel, no cambia la Ficha varietal.`;
+  $('fy-yemasdardo').value = ay.yemas_dardo ?? r.yemas_dardo ?? '';
+  $('fy-floresyema').value = ay.flores_yema ?? r.flores_yema ?? '';
+  $('fy-floresramilla').value = ay.flores_ramilla ?? r.flores_ramilla ?? '';
+  $('fy-cuajado').value = ay.cuajado ?? r.cuajado ?? '';
+  $('fy-pesofruto').value = ay.peso_fruto ?? r.peso_fruto ?? '';
+  recalcModalYema();
+  if(ay.flores_dardo!=null) $('fy-floresdardo').value = ay.flores_dardo;
+  if(ay.frutos_dardo!=null) $('fy-frutosdardo').value = ay.frutos_dardo;
+  $('modalFilaYema').dataset.conteoId = conteoId;
+  $('modalFilaYema').style.display = 'flex';
+};
+
+$('btnCerrarModalYema')?.addEventListener('click', ()=>{ $('modalFilaYema').style.display='none'; });
+$('btnGuardarFilaYema')?.addEventListener('click', async ()=>{
+  const conteoId = $('modalFilaYema').dataset.conteoId;
+  const conteo = await getConteo(conteoId);
+  if(!conteo){ $('modalFilaYema').style.display='none'; return; }
+  conteo.analisisYema = {
+    activo: true,
+    yemas_dardo: parseFloat($('fy-yemasdardo').value)||0,
+    flores_yema: parseFloat($('fy-floresyema').value)||0,
+    flores_dardo: parseFloat($('fy-floresdardo').value)||0,
+    frutos_dardo: parseFloat($('fy-frutosdardo').value)||0,
+    flores_ramilla: parseFloat($('fy-floresramilla').value)||0,
+    cuajado: parseFloat($('fy-cuajado').value)||0,
+    peso_fruto: parseFloat($('fy-pesofruto').value)||0
+  };
+  const ok = await saveConteo(conteo);
+  if(!ok){ alert('No se pudo guardar el análisis de yema. Revisa tu conexión.'); return; }
+  $('modalFilaYema').style.display='none';
+  if(window.__estDrawFn) window.__estDrawFn();
+});
 
 /* ---------- ESTIMADOR ---------- */
 /* ---------- SIMULADOR DE MARGEN ECONÓMICO ---------- */
@@ -1836,53 +2244,117 @@ function calcularSimuladorMargen(){
   $(id)?.addEventListener('input', calcularSimuladorMargen);
 });
 
-async function estimar(){
+let estimacionIndependienteIniciada = false;
+
+async function estimar(silencioso){
   const variedad = $('e-variedad').value;
   const temporada = $('e-temporada').value.trim() || (new Date().getFullYear()+'-'+(new Date().getFullYear()+1));
   const anioplant = $('e-anioplant').value;
   const densidad = parseFloat($('e-densidad').value)||1250;
   const dardos = parseFloat($('e-dardos').value)||0;
   const ramillas = parseFloat($('e-ramillas').value)||0;
-  if(dardos<=0 && ramillas<=0){ alert('Ingresa al menos dardos o ramillas por planta.'); return; }
+  const pctExport = parseFloat($('e-exportacion').value)||0;
+  const tieneYemaPropia = $('e-tieneyema').value === 'si';
+  if(dardos<=0 && ramillas<=0){ if(!silencioso) alert('Ingresa al menos dardos o ramillas por planta.'); return; }
+  estimacionIndependienteIniciada = true;
 
   const fe = factorEdad(anioplant, temporada);
-  const base = coefBase(variedad);
-  const calibrado = await coefCalibrado(variedad);
 
   let kgPlanta, fuente;
-  if(calibrado){
-    const unidades = (dardos + 0.5*ramillas)*fe;
-    kgPlanta = unidades*calibrado;
-    fuente = 'calibrado';
+  if(tieneYemaPropia){
+    const fr = parseFloat($('e-yema-floresramilla').value)||0;
+    const cuaj = parseFloat($('e-yema-cuajado').value)||0;
+    const peso = parseFloat($('e-yema-pesofruto').value)||0;
+    const frutosDardo = parseFloat($('e-yema-frutosdardo').value)||0;
+    const coefDardo = frutosDardo*peso/1000;
+    const coefRamilla = fr*cuaj*peso/1000;
+    kgPlanta = (dardos*coefDardo + ramillas*coefRamilla)*fe;
+    fuente = 'propio';
   } else {
-    kgPlanta = (dardos*base.dardo + ramillas*base.ramilla)*fe;
-    fuente = 'referencial';
+    const base = coefBase(variedad);
+    const calibrado = await coefCalibrado(variedad);
+    if(calibrado){
+      const unidades = (dardos + 0.5*ramillas)*fe;
+      kgPlanta = unidades*calibrado;
+      fuente = 'calibrado';
+    } else {
+      kgPlanta = (dardos*base.dardo + ramillas*base.ramilla)*fe;
+      fuente = 'referencial';
+    }
   }
   const kgHa = kgPlanta*densidad;
+  const kgHaExport = kgHa*(pctExport/100);
+
+  const badgeTxt = fuente==='calibrado' ? 'coef. calibrado local' : (fuente==='propio' ? 'análisis de yema propio' : 'coef. referencial');
+  const badgeClass = fuente==='calibrado' ? 'badge-calibrado' : (fuente==='propio' ? 'badge-calibrado' : 'badge-referencial');
 
   $('estimadoResultado').innerHTML = `
     <div class="result-box">
-      <div class="lbl">Estimación · ${variedad} · ${temporada} <span class="badge ${fuente==='calibrado'?'badge-calibrado':'badge-referencial'}" style="margin-left:6px;">${fuente==='calibrado'?'coef. calibrado local':'coef. referencial'}</span></div>
+      <div class="lbl">Estimación · ${variedad} · ${temporada} <span class="badge ${badgeClass}" style="margin-left:6px;">${badgeTxt}</span></div>
       <div class="result-grid" style="margin-top:10px;">
         <div><div class="num">${kgPlanta.toFixed(1)}</div><div class="lbl">kg / planta</div></div>
-        <div><div class="num">${kgHa.toFixed(0)}</div><div class="lbl">kg / ha (${densidad} pl/ha)</div></div>
+        <div><div class="num">${kgHa.toFixed(0)}</div><div class="lbl">kg / ha bruto (${densidad} pl/ha)</div></div>
       </div>
-      <div class="lbl" style="margin-top:14px;">factor de edad aplicado: ${(fe*100).toFixed(0)}%</div>
+      <div class="result-grid" style="margin-top:10px;">
+        <div><div class="num">${kgHaExport.toFixed(0)}</div><div class="lbl">kg / ha exportable (${pctExport}%)</div></div>
+        <div><div class="num" style="font-size:20px;">${(fe*100).toFixed(0)}%</div><div class="lbl">factor de edad aplicado</div></div>
+      </div>
     </div>
     ${fuente==='referencial' ? '<div class="note-box" style="margin-top:14px;">Este cálculo usa el coeficiente referencial de la ficha varietal. Registra tu cosecha real de esta temporada en "Registrar conteo" para que el sistema empiece a calibrar el coeficiente con datos propios de tu huerto.</div>' : ''}
   `;
 }
 
+function recalcYemaPropiaIndependiente(){
+  const yd = parseFloat($('e-yema-yemasdardo').value)||0;
+  const fy = parseFloat($('e-yema-floresyema').value)||0;
+  const cuaj = parseFloat($('e-yema-cuajado').value)||0;
+  const floresDardo = yd*fy;
+  $('e-yema-floresdardo').value = floresDardo.toFixed(2);
+  $('e-yema-frutosdardo').value = (floresDardo*cuaj).toFixed(2);
+}
+['e-yema-yemasdardo','e-yema-floresyema','e-yema-cuajado'].forEach(id=>{
+  $(id)?.addEventListener('input', recalcYemaPropiaIndependiente);
+});
+
+function precargarYemaPropia(){
+  const variedad = $('e-variedad').value;
+  const r = REF[variedad];
+  if(!r) return;
+  $('e-yema-floresyema').value = r.flores_yema ?? '';
+  $('e-yema-yemasdardo').value = r.yemas_dardo ?? '';
+  $('e-yema-floresramilla').value = r.flores_ramilla ?? '';
+  $('e-yema-cuajado').value = r.cuajado ?? '';
+  $('e-yema-pesofruto').value = r.peso_fruto ?? '';
+  recalcYemaPropiaIndependiente();
+}
+$('e-tieneyema')?.addEventListener('change', ()=>{
+  const si = $('e-tieneyema').value === 'si';
+  $('e-yemaPropiaWrap').style.display = si ? 'block' : 'none';
+  if(si) precargarYemaPropia();
+  if(estimacionIndependienteIniciada) estimar(true);
+});
+$('e-variedad')?.addEventListener('change', ()=>{
+  if($('e-tieneyema') && $('e-tieneyema').value === 'si') precargarYemaPropia();
+});
+
 /* ---------- INIT ---------- */
 async function initApp(){
   actualizarEstadoConexion();
-  REF = await safeGet('referencia-varietal') || JSON.parse(JSON.stringify(REF_DEFAULT));
+  const refGuardada = await safeGet('referencia-varietal');
+  REF = {};
+  VARIEDADES.forEach(v=>{
+    REF[v] = (refGuardada && refGuardada[v]) ? refGuardada[v] : JSON.parse(JSON.stringify(REF_DEFAULT[v]));
+  });
   EDAD = await safeGet('factor-edad') || JSON.parse(JSON.stringify(EDAD_DEFAULT));
   initSelects();
   tabSwitch();
   renderTablaMuestras();
   initCurioSlider();
-  $('btnEstimar').addEventListener('click', estimar);
+  $('btnEstimar').addEventListener('click', ()=>estimar(false));
+  ['e-variedad','e-temporada','e-anioplant','e-densidad','e-dardos','e-ramillas','e-exportacion','e-yema-floresyema','e-yema-yemasdardo','e-yema-floresdardo','e-yema-frutosdardo','e-yema-floresramilla','e-yema-cuajado','e-yema-pesofruto'].forEach(id=>{
+    $(id)?.addEventListener('input', ()=>{ if(estimacionIndependienteIniciada) estimar(true); });
+    $(id)?.addEventListener('change', ()=>{ if(estimacionIndependienteIniciada) estimar(true); });
+  });
   $('btnGuardarRef').addEventListener('click', async ()=>{
     if(correoActual !== ADMIN_EMAIL){ alert('Solo el usuario administrador puede editar estos valores.'); return; }
     const okRef = await safeSet('referencia-varietal', REF);
@@ -1901,6 +2373,12 @@ async function initApp(){
     await safeSet('referencia-varietal', REF);
     await safeSet('factor-edad', EDAD);
     renderReferencia();
+  });
+  $('btnVerHistorialFicha').addEventListener('click', async ()=>{
+    const wrap = $('historialFichaWrap');
+    const abrir = wrap.style.display === 'none';
+    wrap.style.display = abrir ? 'block' : 'none';
+    if(abrir) await renderHistorialFicha();
   });
   renderInicio();
 }
@@ -2153,6 +2631,12 @@ if(window.__FIREBASE_OK__){
   initApp();
 } else {
   mostrarErrorFirebase();
-}</script>
+}
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  });
+}
+</script>
 </body>
 </html>
