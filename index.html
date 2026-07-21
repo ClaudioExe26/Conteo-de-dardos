@@ -705,7 +705,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
     </div>
   </section>
 
-  <footer class="foot">Cuaderno de Dardos — herramienta de apoyo agronómico. Los valores estimados son orientativos y deben validarse con aforo y cosecha real. <b>v2.0</b></footer>
+  <footer class="foot">Cuaderno de Dardos — herramienta de apoyo agronómico. Los valores estimados son orientativos y deben validarse con aforo y cosecha real. <b>v2.2</b></footer>
 </div>
 </div>
 
@@ -784,6 +784,7 @@ let EDAD = [];
 let cuartelActualId = null;   // cuartel en edición dentro del wizard
 let muestrasTemp = [];        // puntos de muestreo (plantas) del conteo en curso
 let editandoMuestraIndex = null; // índice de muestrasTemp que se está revisando/editando, o null si es nueva
+let promedioVariedadSesion = undefined; // caché del promedio histórico de la variedad, calculado una sola vez por sesión de conteo
 
 const $ = id => document.getElementById(id);
 
@@ -1360,7 +1361,10 @@ $('btnConfirmarConteo')?.addEventListener('click', async ()=>{
 
   const cuActual = await getCuartel(cuartelActualId);
   if(cuActual){
-    const prom = await calcularPromedioVariedad(cuActual.variedad);
+    if(promedioVariedadSesion === undefined){
+      promedioVariedadSesion = await calcularPromedioVariedad(cuActual.variedad);
+    }
+    const prom = promedioVariedadSesion;
     if(prom){
       const dFuera = prom.dardos>0 && (dTot > prom.dardos*1.8 || dTot < prom.dardos*0.5);
       const rFuera = prom.ramillas>0 && (rTot > prom.ramillas*1.8 || rTot < prom.ramillas*0.5);
@@ -1439,7 +1443,7 @@ $('btnPaso1Continuar')?.addEventListener('click', async ()=>{
   if(!ok){ alert('No se pudo guardar el cuartel.'); return; }
   const esNuevo = cuartelActualId !== cu.id;
   cuartelActualId = cu.id;
-  if(esNuevo){ muestrasTemp = []; }
+  if(esNuevo){ muestrasTemp = []; promedioVariedadSesion = undefined; }
   if(!borradorId && !editandoConteoId) borradorId = 'k'+Date.now()+Math.random().toString(36).slice(2,7);
   if(!$('lc-responsable').value) $('lc-responsable').value = usuarioActual||'';
   await actualizarResumenCuartel();
@@ -1515,7 +1519,7 @@ async function abrirTabConteo(){
     }
   } else {
     limpiarFormPaso1();
-    cuartelActualId = null; muestrasTemp = []; entradasActuales = []; editandoConteoId = null; borradorId = null; editandoMuestraIndex = null;
+    cuartelActualId = null; muestrasTemp = []; entradasActuales = []; editandoConteoId = null; borradorId = null; editandoMuestraIndex = null; promedioVariedadSesion = undefined;
     $('lc-fecha').value = new Date().toISOString().slice(0,10); $('lc-temporada').value=''; $('lc-responsable').value = usuarioActual||''; $('k-kgreal').value='';
     await poblarPickerCuartelConteo();
     irACStep(1);
@@ -2424,6 +2428,7 @@ let vistaPendienteLogin = null;
 function refrescarVistaActual(){
   const activa = document.querySelector('nav.tabs button.active')?.dataset.view;
   if(activa==='v-referencia') renderReferencia();
+  if(activa==='v-inicio') renderInicio();
 }
 
 function actualizarHeaderAuth(){
@@ -2533,6 +2538,7 @@ if(window.__FIREBASE_OK__){
       puedeCrearUsuariosActual = doc.exists ? !!doc.data().puedeCrearUsuarios : false;
       ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
       actualizarHeaderAuth();
+      refrescarVistaActual();
     }
   });
 }
