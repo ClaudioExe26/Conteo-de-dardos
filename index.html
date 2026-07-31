@@ -279,7 +279,12 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
     <h1 style="font-size:20px;">Gestionar usuarios</h1>
     <p class="sub">Estos son los usuarios que pueden trabajar en el cuaderno. Los datos del huerto son los mismos para todos, esto solo controla quién puede entrar a registrar.</p>
     <div id="listaUsuariosSistema" style="margin-bottom:18px;"></div>
-    <h1 style="font-size:15px;margin-top:8px;">Agregar nuevo usuario</h1>
+    <div id="solicitudesPendientesWrap" style="display:none;margin-bottom:18px;">
+      <h1 style="font-size:15px;">📩 Solicitudes de nuevo usuario pendientes</h1>
+      <div id="solicitudesPendientesContent"></div>
+    </div>
+    <h1 style="font-size:15px;margin-top:8px;" id="tituloAgregarUsuario">Agregar nuevo usuario</h1>
+    <p class="sub" id="subAgregarUsuario" style="display:none;">Esto no crea la cuenta de inmediato — queda como solicitud pendiente hasta que el administrador la acepte.</p>
     <label>Correo electrónico</label>
     <input type="email" id="nuevoUsuarioMgmt" placeholder="Ej: maria@correo.com" autocomplete="off">
     <label>Contraseña</label>
@@ -323,7 +328,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
     </div>
     <div class="user-badge" id="authLogged" style="display:none;">
       <span id="usuarioBadgeTxt">🧑‍🌾 —</span>
-      <button id="btnGestionUsuarios">Gestionar usuarios</button>
+      <button id="btnGestionUsuarios">Gestionar usuarios <span id="badgeSolicitudes" style="display:none;background:#B00020;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
       <button id="btnCambiarUsuario">Cerrar sesión</button>
     </div>
   </div>
@@ -705,7 +710,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
     </div>
   </section>
 
-  <footer class="foot">Cuaderno de Dardos — herramienta de apoyo agronómico. Los valores estimados son orientativos y deben validarse con aforo y cosecha real. <b>v2.2</b></footer>
+  <footer class="foot">Cuaderno de Dardos — herramienta de apoyo agronómico. Los valores estimados son orientativos y deben validarse con aforo y cosecha real. <b>v3.0</b></footer>
 </div>
 </div>
 
@@ -817,6 +822,9 @@ async function getCuartel(id){
 }
 async function saveCuartel(cuartel){
   return escrituraOffline(()=> db.collection('cuarteles').doc(cuartel.id).set(cuartel));
+}
+async function deleteCuartel(id){
+  return escrituraOffline(()=> db.collection('cuarteles').doc(id).delete());
 }
 
 async function listConteos(){
@@ -937,6 +945,15 @@ function coefBase(variedad){
   };
 }
 
+let calibradoCache = {}; // evita recalcular (con lecturas a Firestore) en cada tecleo de "Estimación independiente"
+function invalidarCalibradoCache(){ calibradoCache = {}; }
+async function coefCalibradoCacheado(variedad){
+  if(!(variedad in calibradoCache)){
+    calibradoCache[variedad] = await coefCalibrado(variedad);
+  }
+  return calibradoCache[variedad];
+}
+
 async function coefCalibrado(variedad, cuartelesPre, conteosPre){
   const cuarteles = cuartelesPre || await listCuarteles();
   const conteos = conteosPre || await listConteos();
@@ -983,15 +1000,18 @@ function tabSwitch(){
   });
 }
 
+function activarVista(view){
+  document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
+  document.querySelector(`nav.tabs button[data-view="${view}"]`)?.classList.add('active');
+  document.querySelectorAll('section.view').forEach(x=>x.classList.remove('active'));
+  $(view).classList.add('active');
+}
 function irATab(view){
   if(VISTAS_PROTEGIDAS.includes(view) && !usuarioActual){
     abrirLogin(view);
     return;
   }
-  document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
-  document.querySelector(`nav.tabs button[data-view="${view}"]`)?.classList.add('active');
-  document.querySelectorAll('section.view').forEach(x=>x.classList.remove('active'));
-  $(view).classList.add('active');
+  activarVista(view);
   if(view==='v-inicio') renderInicio();
   if(view==='v-historial') renderHistorial();
   if(view==='v-referencia') renderReferencia();
@@ -1025,7 +1045,7 @@ async function renderListaCuarteles(){
       <td>${c.hectareas||'—'}</td>
       <td>${dens? dens+' pl/ha':'—'}</td>
       <td class="txt">${activo? '<span class="badge badge-calibrado">activo</span>' : '<span class="badge badge-referencial">archivado</span>'}</td>
-      <td><button class="icon-edit" onclick="cargarCuartelParaEditar('${c.id}')">editar</button><button class="icon-edit" onclick="irAContarCuartel('${c.id}')">contar ahora →</button><button class="icon-del" onclick="toggleArchivarCuartel('${c.id}')">${activo?'archivar':'reactivar'}</button></td>
+      <td><button class="icon-edit" onclick="cargarCuartelParaEditar('${c.id}')">editar</button><button class="icon-edit" onclick="irAContarCuartel('${c.id}')">contar ahora →</button><button class="icon-del" onclick="toggleArchivarCuartel('${c.id}')">${activo?'archivar':'reactivar'}</button><button class="icon-del" onclick="borrarCuartelDefinitivo('${c.id}')">eliminar</button></td>
     </tr>`;
   });
   html += '</tbody></table>';
@@ -1044,6 +1064,36 @@ window.toggleArchivarCuartel = async (id)=>{
   renderListaCuarteles();
 };
 
+window.borrarCuartelDefinitivo = async (id)=>{
+  const c = await getCuartel(id);
+  if(!c){ alert('No se encontró ese cuartel (puede que ya lo hayas eliminado).'); return; }
+  const esAdmin = correoActual === ADMIN_EMAIL;
+  const esAutor = c.creadoPor && c.creadoPor === correoActual;
+  if(!esAdmin && !esAutor){ alert('Solo el usuario administrador o quien creó este cuartel puede eliminarlo.'); return; }
+
+  const conteos = await listConteos();
+  const conteosDelCuartel = conteos.filter(cn=>cn.cuartelId===id);
+
+  let msg;
+  if(conteosDelCuartel.length>0){
+    msg = `⚠️ Este cuartel "${c.nombre}" tiene ${conteosDelCuartel.length} labor(es) de conteo ya registradas en Historial.\n\n`
+      + `Si lo eliminas, esas labores NO se borran, pero quedarán "huérfanas" (sin nombre de cuartel, zona ni variedad al mostrarlas en Historial y el Estimador).\n\n`
+      + `Si solo te equivocaste al crearlo y no tiene conteos reales, esto es seguro. Si ya tiene historial real, quizás prefieras usar "archivar" en vez de "eliminar".\n\n`
+      + `¿Eliminar de todas formas, en forma PERMANENTE?`;
+  } else {
+    msg = `¿Eliminar el cuartel "${c.nombre}" de forma PERMANENTE? Esta acción no se puede deshacer. (No tiene labores de conteo registradas todavía, así que es seguro).`;
+  }
+  if(!confirm(msg)) return;
+  if(conteosDelCuartel.length>0 && !confirm('Última confirmación: esto es definitivo y no se puede deshacer. ¿Continuar?')) return;
+
+  const ok = await deleteCuartel(id);
+  if(!ok){ alert('⚠️ No se pudo eliminar. Revisa tu conexión e inténtalo de nuevo.'); return; }
+  alert('Cuartel eliminado.');
+  renderListaCuarteles();
+  poblarPickerCuarteles();
+  renderInicio();
+};
+
 window.cargarCuartelParaEditar = async (id)=>{
   const c = await getCuartel(id);
   if(!c) return;
@@ -1057,12 +1107,12 @@ window.cargarCuartelParaEditar = async (id)=>{
   window.scrollTo({top:0, behavior:'smooth'});
 };
 
-window.irAContarCuartel = (id)=>{
-  irATab('v-conteo');
-  setTimeout(()=>{
-    $('pickCuartelConteo').value = id;
-    $('pickCuartelConteo').dispatchEvent(new Event('change'));
-  }, 150);
+window.irAContarCuartel = async (id)=>{
+  if(!usuarioActual){ abrirLogin('v-conteo'); return; }
+  activarVista('v-conteo');
+  await poblarPickerCuartelConteo();
+  $('pickCuartelConteo').value = id;
+  $('pickCuartelConteo').dispatchEvent(new Event('change'));
 };
 
 $('pickCuartel')?.addEventListener('change', async (e)=>{
@@ -1191,6 +1241,16 @@ async function persistirBorrador(){
   };
   await saveBorrador(borrador);
 }
+function temporadaDesdeFecha(fechaStr){
+  if(!fechaStr) return '';
+  const anio = parseInt(fechaStr.slice(0,4), 10);
+  if(!anio) return '';
+  return anio + '-' + (anio+1);
+}
+$('lc-fecha')?.addEventListener('change', ()=>{
+  const t = temporadaDesdeFecha($('lc-fecha').value);
+  if(t) $('lc-temporada').value = t;
+});
 ['lc-fecha','lc-temporada','lc-responsable','k-kgreal'].forEach(id=>{
   $(id)?.addEventListener('change', persistirBorrador);
 });
@@ -1230,7 +1290,7 @@ function renderTablaMuestras(){
     const sug = sugerirPlantas(parseFloat(c.hectareas), dens) || 20;
     const pct = Math.min(100, Math.round((n/sug)*100));
     $('progresoFill').style.width = pct+'%';
-    $('progresoTxt').textContent = `${n} de ${sug} plantas sugeridas para este cuartel (${pct}%).`;
+    $('progresoTxt').innerHTML = `Llevas <b>${n}/${sug}</b> plantas sugeridas para este cuartel (${pct}%).`;
   });
 }
 window.borrarMuestraTemp = (i)=>{
@@ -1520,7 +1580,7 @@ async function abrirTabConteo(){
   } else {
     limpiarFormPaso1();
     cuartelActualId = null; muestrasTemp = []; entradasActuales = []; editandoConteoId = null; borradorId = null; editandoMuestraIndex = null; promedioVariedadSesion = undefined;
-    $('lc-fecha').value = new Date().toISOString().slice(0,10); $('lc-temporada').value=''; $('lc-responsable').value = usuarioActual||''; $('k-kgreal').value='';
+    $('lc-fecha').value = new Date().toISOString().slice(0,10); $('lc-temporada').value=temporadaDesdeFecha($('lc-fecha').value); $('lc-responsable').value = usuarioActual||''; $('k-kgreal').value='';
     await poblarPickerCuartelConteo();
     irACStep(1);
   }
@@ -1546,6 +1606,7 @@ $('btnGuardarConteo')?.addEventListener('click', async ()=>{
   };
   const ok = await saveConteo(conteo);
   if(ok){
+    invalidarCalibradoCache();
     await deleteBorrador();
     alert(editandoConteoId? 'Labor actualizada correctamente.' : 'Labor de conteo guardada correctamente.');
     cuartelActualId=null; muestrasTemp=[]; entradasActuales=[]; editandoConteoId=null; borradorId=null; editandoMuestraIndex=null;
@@ -1569,7 +1630,8 @@ $('btnDescartarConteo')?.addEventListener('click', async ()=>{
 async function editarConteo(id){
   const c = await getConteo(id);
   if(!c) return;
-  irATab('v-conteo');
+  if(!usuarioActual){ abrirLogin('v-conteo'); return; }
+  activarVista('v-conteo');
   cuartelActualId = c.cuartelId;
   muestrasTemp = c.muestras || [];
   entradasActuales = [];
@@ -1579,6 +1641,7 @@ async function editarConteo(id){
   $('k-kgreal').value = c.kgreal||'';
   $('m-hilera').value=''; $('m-planta').value='';
   $('editandoPlantaAviso').style.display='none';
+  await poblarPickerCuartelConteo();
   const cu = await getCuartel(cuartelActualId);
   if(cu){
     $('cc-productor').value=cu.productor||''; $('cc-zona').value=cu.zona||''; $('cc-portainjerto').value=cu.portainjerto||'Colt'; $('cc-variedad').value=cu.variedad; $('cc-anioplant').value=cu.anioplant||'';
@@ -1713,8 +1776,9 @@ async function renderInicio(){
   const cMap = {}; cuarteles.forEach(c=>cMap[c.id]=c);
   await renderPortal(conteos, cuarteles, cMap);
   calcularSimuladorMargen();
-  if(correoActual === ADMIN_EMAIL){
+  if(tieneAccesoAdminPanel()){
     $('panelAdminCard').style.display = 'block';
+    $('btnExportarTodo').style.display = (correoActual === ADMIN_EMAIL) ? 'inline-block' : 'none';
     await renderPanelAdmin(conteos, cuarteles, cMap);
   } else {
     $('panelAdminCard').style.display = 'none';
@@ -1913,7 +1977,7 @@ async function renderPortal(conteos, cuartelesAll, cMap){
 
 /* ---------- REFERENCIA VARIETAL ---------- */
 function renderReferencia(){
-  const editable = correoActual === ADMIN_EMAIL;
+  const editable = tieneAccesoAdminPanel();
   let html='';
   VARIEDADES.forEach(v=>{
     const r = REF[v] || REF_DEFAULT[v] || {flores_yema:0,yemas_dardo:0,flores_ramilla:0,cuajado:0,peso_fruto:0,preliminar:true,nota:'Sin datos cargados.'};
@@ -2276,7 +2340,7 @@ async function estimar(silencioso){
     fuente = 'propio';
   } else {
     const base = coefBase(variedad);
-    const calibrado = await coefCalibrado(variedad);
+    const calibrado = await coefCalibradoCacheado(variedad);
     if(calibrado){
       const unidades = (dardos + 0.5*ramillas)*fe;
       kgPlanta = unidades*calibrado;
@@ -2360,7 +2424,7 @@ async function initApp(){
     $(id)?.addEventListener('change', ()=>{ if(estimacionIndependienteIniciada) estimar(true); });
   });
   $('btnGuardarRef').addEventListener('click', async ()=>{
-    if(correoActual !== ADMIN_EMAIL){ alert('Solo el usuario administrador puede editar estos valores.'); return; }
+    if(!tieneAccesoAdminPanel()){ alert('Solo el usuario administrador puede editar estos valores.'); return; }
     const okRef = await safeSet('referencia-varietal', REF);
     const okEdad = await safeSet('factor-edad', EDAD);
     if(okRef && okEdad){
@@ -2370,7 +2434,7 @@ async function initApp(){
     }
   });
   $('btnResetRef').addEventListener('click', async ()=>{
-    if(correoActual !== ADMIN_EMAIL){ alert('Solo el usuario administrador puede restaurar estos valores.'); return; }
+    if(!tieneAccesoAdminPanel()){ alert('Solo el usuario administrador puede restaurar estos valores.'); return; }
     if(!confirm('¿Restaurar todos los valores a los referenciales por defecto? Se perderán tus ediciones.')) return;
     REF = JSON.parse(JSON.stringify(REF_DEFAULT));
     EDAD = JSON.parse(JSON.stringify(EDAD_DEFAULT));
@@ -2422,7 +2486,9 @@ async function escrituraOffline(promiseFn, silencioso){
 const ADMIN_EMAIL = 'cespinoza@frutea.cl'; // único usuario que puede editar la Ficha varietal, gestionar usuarios y eliminar registros de cualquiera
 let usuarioActual = null;   // nombre para mostrar (o el correo si no hay nombre)
 let correoActual = null;    // correo real autenticado, usado para permisos
-let puedeCrearUsuariosActual = false; // permiso delegado por el admin para crear nuevos usuarios
+let puedeCrearUsuariosActual = false; // permiso delegado por el admin para solicitar nuevos usuarios
+let esAdminSecundarioActual = false; // rol delegado por el admin principal: ve panel resumen y edita ficha varietal, nada más
+function tieneAccesoAdminPanel(){ return correoActual === ADMIN_EMAIL || esAdminSecundarioActual; }
 let vistaPendienteLogin = null;
 
 function refrescarVistaActual(){
@@ -2498,8 +2564,10 @@ async function onLoginExitoso(user){
   usuarioActual = doc.exists ? (doc.data().nombre || doc.data().correo) : user.email;
   correoActual = user.email;
   puedeCrearUsuariosActual = doc.exists ? !!doc.data().puedeCrearUsuarios : false;
+  esAdminSecundarioActual = doc.exists ? !!doc.data().esAdminSecundario : false;
   ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
   actualizarHeaderAuth();
+  chequearSolicitudesPendientes();
   $('loginScreen').style.display='none';
   const destino = vistaPendienteLogin;
   vistaPendienteLogin = null;
@@ -2523,7 +2591,9 @@ $('btnCambiarUsuario').addEventListener('click', async ()=>{
   usuarioActual = null;
   correoActual = null;
   puedeCrearUsuariosActual = false;
+  esAdminSecundarioActual = false;
   actualizarHeaderAuth();
+  if($('badgeSolicitudes')) $('badgeSolicitudes').style.display='none';
   irATab('v-inicio');
 });
 
@@ -2536,8 +2606,10 @@ if(window.__FIREBASE_OK__){
       usuarioActual = doc.exists ? (doc.data().nombre || doc.data().correo) : user.email;
       correoActual = user.email;
       puedeCrearUsuariosActual = doc.exists ? !!doc.data().puedeCrearUsuarios : false;
+      esAdminSecundarioActual = doc.exists ? !!doc.data().esAdminSecundario : false;
       ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
       actualizarHeaderAuth();
+      chequearSolicitudesPendientes();
       refrescarVistaActual();
     }
   });
@@ -2574,14 +2646,18 @@ async function renderListaUsuariosMgmt(){
     usuarios.sort((a,b)=> (b.ultimoAcceso||'').localeCompare(a.ultimoAcceso||''));
     $('listaUsuariosSistema').innerHTML = usuarios.map(u=>{
       const esEsteAdmin = u.correo === ADMIN_EMAIL;
-      const rolTxt = esEsteAdmin ? '👑 admin' : (u.puedeCrearUsuarios ? '🔑 puede crear usuarios' : '');
+      const roles = [];
+      if(esEsteAdmin) roles.push('👑 admin principal');
+      if(!esEsteAdmin && u.esAdminSecundario) roles.push('🛡️ admin secundario');
+      if(!esEsteAdmin && u.puedeCrearUsuarios) roles.push('🔑 puede solicitar usuarios');
       const controlesAdmin = (esAdmin && !esEsteAdmin) ? `
-          <button class="icon-edit" onclick="toggleCrearUsuariosMgmt('${u.uid}', ${!!u.puedeCrearUsuarios})">${u.puedeCrearUsuarios? 'quitar permiso crear usuarios':'dar permiso crear usuarios'}</button>
+          <button class="icon-edit" onclick="toggleAdminSecundarioMgmt('${u.uid}', ${!!u.esAdminSecundario})">${u.esAdminSecundario? 'quitar admin secundario':'hacer admin secundario'}</button>
+          <button class="icon-edit" onclick="toggleCrearUsuariosMgmt('${u.uid}', ${!!u.puedeCrearUsuarios})">${u.puedeCrearUsuarios? 'quitar permiso de solicitar':'dar permiso de solicitar'}</button>
           <button class="icon-del" onclick="eliminarUsuarioMgmt('${u.uid}','${u.correo}')">quitar acceso</button>` : '';
       return `
       <div class="user-list-item" style="flex-direction:column;align-items:stretch;gap:4px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span>🧑‍🌾 ${u.nombre||u.correo} <span style="color:var(--muted);font-size:11px;">(${u.correo})</span> ${rolTxt? '<span class="badge badge-calibrado">'+rolTxt+'</span>':''}</span>
+          <span>🧑‍🌾 ${u.nombre||u.correo} <span style="color:var(--muted);font-size:11px;">(${u.correo})</span> ${roles.map(r=>'<span class="badge badge-calibrado">'+r+'</span>').join(' ')}</span>
         </div>
         <div style="font-size:11.5px;color:var(--muted);">Creado: ${formatFecha(u.creadoEn)} · Último ingreso: ${formatFecha(u.ultimoAcceso)}</div>
         ${controlesAdmin? `<div style="text-align:right;">${controlesAdmin}</div>`:''}
@@ -2589,6 +2665,79 @@ async function renderListaUsuariosMgmt(){
     }).join('');
   }catch(e){ $('listaUsuariosSistema').innerHTML = '<div class="empty">No se pudo cargar la lista.</div>'; }
 }
+
+async function contarSolicitudesPendientes(){
+  try{
+    const snap = await db.collection('solicitudesUsuario').where('estado','==','pendiente').get();
+    return snap.size;
+  }catch(e){ return 0; }
+}
+
+async function chequearSolicitudesPendientes(){
+  const badge = $('badgeSolicitudes');
+  if(!badge) return;
+  if(correoActual !== ADMIN_EMAIL){ badge.style.display='none'; return; }
+  const n = await contarSolicitudesPendientes();
+  if(n>0){ badge.textContent = n; badge.style.display='inline-block'; }
+  else { badge.style.display='none'; }
+}
+
+async function renderSolicitudesPendientes(){
+  const wrap = $('solicitudesPendientesWrap');
+  if(correoActual !== ADMIN_EMAIL){ wrap.style.display='none'; return; }
+  try{
+    const snap = await db.collection('solicitudesUsuario').where('estado','==','pendiente').get();
+    const solicitudes = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(solicitudes.length===0){ wrap.style.display='none'; return; }
+    wrap.style.display='block';
+    solicitudes.sort((a,b)=> (a.fecha||'').localeCompare(b.fecha||''));
+    $('solicitudesPendientesContent').innerHTML = solicitudes.map(s=>`
+      <div class="user-list-item" style="flex-direction:column;align-items:stretch;gap:4px;">
+        <div><b>${s.correoSolicitado}</b></div>
+        <div style="font-size:11.5px;color:var(--muted);">Solicitado por ${s.solicitadoPorNombre||s.solicitadoPor} · ${formatFecha(s.fecha)}</div>
+        <div style="text-align:right;">
+          <button class="icon-edit" onclick="aceptarSolicitud('${s.id}')">✔ Aceptar</button>
+          <button class="icon-del" onclick="rechazarSolicitud('${s.id}')">✘ Rechazar</button>
+        </div>
+      </div>`).join('');
+  }catch(e){ wrap.style.display='none'; }
+}
+
+window.aceptarSolicitud = async (id)=>{
+  if(correoActual !== ADMIN_EMAIL) return;
+  const doc = await db.collection('solicitudesUsuario').doc(id).get();
+  if(!doc.exists){ alert('Esa solicitud ya no existe (puede que otra persona ya la haya resuelto).'); renderSolicitudesPendientes(); return; }
+  const s = doc.data();
+  if(!confirm(`¿Crear la cuenta para ${s.correoSolicitado}?`)) return;
+  try{
+    const app2 = getAppSecundaria();
+    const auth2 = app2.auth();
+    const cred = await auth2.createUserWithEmailAndPassword(s.correoSolicitado, s.passwordSolicitada);
+    await db.collection('usuarios').doc(cred.user.uid).set({
+      correo: s.correoSolicitado, nombre: s.correoSolicitado.split('@')[0], creadoEn: new Date().toISOString(),
+      puedeCrearUsuarios: false, ultimoAcceso: null
+    });
+    await auth2.signOut();
+    await db.collection('solicitudesUsuario').doc(id).delete();
+    renderListaUsuariosMgmt();
+    renderSolicitudesPendientes();
+    chequearSolicitudesPendientes();
+    alert('Usuario creado y solicitud aprobada.');
+  }catch(e){ alert(mensajeErrorAuth(e)); }
+};
+window.rechazarSolicitud = async (id)=>{
+  if(correoActual !== ADMIN_EMAIL) return;
+  if(!confirm('¿Rechazar esta solicitud? No se creará la cuenta.')) return;
+  await db.collection('solicitudesUsuario').doc(id).delete();
+  renderSolicitudesPendientes();
+  chequearSolicitudesPendientes();
+};
+
+window.toggleAdminSecundarioMgmt = async (uid, actual)=>{
+  if(correoActual !== ADMIN_EMAIL){ alert('Solo el usuario administrador principal puede otorgar este rol.'); return; }
+  await db.collection('usuarios').doc(uid).set({ esAdminSecundario: !actual }, { merge: true });
+  renderListaUsuariosMgmt();
+};
 window.toggleCrearUsuariosMgmt = async (uid, actual)=>{
   if(correoActual !== ADMIN_EMAIL){ alert('Solo el usuario administrador puede otorgar este permiso.'); return; }
   await db.collection('usuarios').doc(uid).set({ puedeCrearUsuarios: !actual }, { merge: true });
@@ -2602,7 +2751,12 @@ window.eliminarUsuarioMgmt = async (uid, correo)=>{
 };
 $('btnGestionUsuarios').addEventListener('click', async ()=>{
   if(correoActual !== ADMIN_EMAIL && !puedeCrearUsuariosActual){ alert('No tienes permiso para gestionar usuarios.'); return; }
+  const esAdmin = correoActual === ADMIN_EMAIL;
+  $('tituloAgregarUsuario').textContent = esAdmin ? 'Agregar nuevo usuario' : 'Solicitar nuevo usuario';
+  $('subAgregarUsuario').style.display = esAdmin ? 'none' : 'block';
+  $('btnAgregarUsuarioMgmt').textContent = esAdmin ? '+ Agregar usuario' : '📩 Enviar solicitud';
   await renderListaUsuariosMgmt();
+  await renderSolicitudesPendientes();
   $('userMgmtScreen').style.display='flex';
 });
 $('btnCerrarMgmt').addEventListener('click', ()=> $('userMgmtScreen').style.display='none');
@@ -2610,19 +2764,33 @@ $('btnAgregarUsuarioMgmt').addEventListener('click', async ()=>{
   const correo = $('nuevoUsuarioMgmt').value.trim();
   const password = $('nuevoPasswordMgmt').value;
   if(!correo||!password){ alert('Ingresa correo y contraseña.'); return; }
-  try{
-    const app2 = getAppSecundaria();
-    const auth2 = app2.auth();
-    const cred = await auth2.createUserWithEmailAndPassword(correo, password);
-    await db.collection('usuarios').doc(cred.user.uid).set({
-      correo, nombre: correo.split('@')[0], creadoEn: new Date().toISOString(),
-      puedeCrearUsuarios: false, ultimoAcceso: null
-    });
-    await auth2.signOut();
-    $('nuevoUsuarioMgmt').value=''; $('nuevoPasswordMgmt').value='';
-    renderListaUsuariosMgmt();
-    alert('Usuario creado correctamente.');
-  }catch(e){ alert(mensajeErrorAuth(e)); }
+  const esAdmin = correoActual === ADMIN_EMAIL;
+  if(esAdmin){
+    try{
+      const app2 = getAppSecundaria();
+      const auth2 = app2.auth();
+      const cred = await auth2.createUserWithEmailAndPassword(correo, password);
+      await db.collection('usuarios').doc(cred.user.uid).set({
+        correo, nombre: correo.split('@')[0], creadoEn: new Date().toISOString(),
+        puedeCrearUsuarios: false, ultimoAcceso: null
+      });
+      await auth2.signOut();
+      $('nuevoUsuarioMgmt').value=''; $('nuevoPasswordMgmt').value='';
+      renderListaUsuariosMgmt();
+      alert('Usuario creado correctamente.');
+    }catch(e){ alert(mensajeErrorAuth(e)); }
+  } else {
+    try{
+      const id = 's'+Date.now()+Math.random().toString(36).slice(2,7);
+      await db.collection('solicitudesUsuario').doc(id).set({
+        id, correoSolicitado: correo, passwordSolicitada: password,
+        solicitadoPor: correoActual, solicitadoPorNombre: usuarioActual,
+        fecha: new Date().toISOString(), estado: 'pendiente'
+      });
+      $('nuevoUsuarioMgmt').value=''; $('nuevoPasswordMgmt').value='';
+      alert('Solicitud enviada. Quedará pendiente hasta que el administrador la acepte.');
+    }catch(e){ alert('No se pudo enviar la solicitud. Revisa tu conexión e inténtalo de nuevo.'); }
+  }
 });
 
 function mostrarErrorFirebase(){
