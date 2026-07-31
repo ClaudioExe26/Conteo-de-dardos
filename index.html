@@ -103,11 +103,11 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
 
 /* login / gestión de usuarios (modales opcionales) */
 #loginScreen, #userMgmtScreen{position:fixed;inset:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:rgba(59,15,48,.94);padding:20px;z-index:9000;}
-.login-card{position:relative;background:var(--paper);border-radius:12px;padding:34px 30px;max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+.login-card{position:relative;background:var(--paper);border-radius:12px;padding:34px 30px;max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .login-card h1{font-family:'Fraunces',serif;font-size:24px;margin:0 0 4px;color:var(--green-dark);}
 .login-card .sub{color:var(--muted);font-size:13.5px;margin:0 0 20px;line-height:1.5;}
 .login-card label{margin-top:10px;}
-.modal-close{position:absolute;top:10px;right:12px;background:none;border:none;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;}
+.modal-close{position:sticky;top:0;float:right;margin:-10px -8px -22px 0;background:var(--paper);border:none;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;z-index:2;}
 .login-swap{font-size:12px;color:var(--muted);text-align:center;margin-top:16px;}
 .login-swap a{color:var(--cherry);text-decoration:underline;cursor:pointer;}
 .user-list-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:13.5px;}
@@ -255,11 +255,11 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
       <div class="actions">
         <button class="btn btn-primary" id="btnLogin" style="width:100%;">Ingresar →</button>
       </div>
-      <p class="login-swap">¿Primera vez aquí y no tienes cuarteles guardados? Si el cuaderno está recién configurado, puedes <a href="#" id="linkCrearPrimero">crear el primer usuario</a>.</p>
+      <p class="login-swap">¿No tienes cuenta todavía? Puedes <a href="#" id="linkCrearPrimero">crear una cuenta nueva</a>, quedará pendiente hasta que el administrador te dé acceso.</p>
     </div>
 
     <div id="loginModoCrear" style="display:none;">
-      <p class="sub">Aún no hay usuarios de trabajo creados. Crea el primero para empezar (podrás agregar más después desde "Gestionar usuarios").</p>
+      <p class="sub">Crea tu cuenta con correo y contraseña. Quedará pendiente hasta que el administrador (cespinoza@frutea.cl) te autorice a registrar datos.</p>
       <label>Correo electrónico</label>
       <input type="email" id="crearUsuario" placeholder="Ej: juan@correo.com" autocomplete="username">
       <label>Contraseña</label>
@@ -2557,9 +2557,12 @@ async function crearPrimerUsuario(){
     const cred = await auth.createUserWithEmailAndPassword(correo, password);
     await db.collection('usuarios').doc(cred.user.uid).set({
       correo, nombre: correo.split('@')[0], creadoEn: new Date().toISOString(),
-      puedeCrearUsuarios: false, activo: true, ultimoAcceso: new Date().toISOString()
+      puedeCrearUsuarios: false, activo: false, ultimoAcceso: new Date().toISOString()
     });
     await onLoginExitoso(cred.user);
+    if(correo !== ADMIN_EMAIL){
+      alert('Cuenta creada. Todavía no puedes registrar datos: el administrador (cespinoza@frutea.cl) debe autorizarte primero desde "Gestionar usuarios".');
+    }
   }catch(e){ alert(mensajeErrorAuth(e)); }
 }
 
@@ -2570,14 +2573,13 @@ async function onLoginExitoso(user){
   correoActual = user.email;
   puedeCrearUsuariosActual = doc.exists ? !!doc.data().puedeCrearUsuarios : false;
   esAdminSecundarioActual = doc.exists ? !!doc.data().esAdminSecundario : false;
-  usuarioAutorizadoActual = (correoActual === ADMIN_EMAIL) || !doc.exists || doc.data().activo !== false;
+  usuarioAutorizadoActual = (correoActual === ADMIN_EMAIL) || (doc.exists && doc.data().activo !== false);
   if(!doc.exists){
-    // Usuario que ya existía en Authentication pero nunca había iniciado sesión en esta versión de la app:
-    // se crea su ficha completa en Firestore para que aparezca correctamente en "Gestionar usuarios".
-    // Se marca como ya autorizado porque ya venía trabajando antes de esta función.
+    // Cuenta sin ficha en Firestore (creada fuera de este panel, o nunca inició sesión antes).
+    // Se crea su ficha pero SIN autorización: el admin debe activarla manualmente.
     ref.set({
       correo: user.email, nombre: user.email.split('@')[0], creadoEn: new Date().toISOString(),
-      puedeCrearUsuarios: false, activo: true, ultimoAcceso: new Date().toISOString()
+      puedeCrearUsuarios: false, activo: false, ultimoAcceso: new Date().toISOString()
     }, { merge: true }).catch(()=>{});
   } else {
     ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
@@ -2624,11 +2626,11 @@ if(window.__FIREBASE_OK__){
       correoActual = user.email;
       puedeCrearUsuariosActual = doc.exists ? !!doc.data().puedeCrearUsuarios : false;
       esAdminSecundarioActual = doc.exists ? !!doc.data().esAdminSecundario : false;
-      usuarioAutorizadoActual = (correoActual === ADMIN_EMAIL) || !doc.exists || doc.data().activo !== false;
+      usuarioAutorizadoActual = (correoActual === ADMIN_EMAIL) || (doc.exists && doc.data().activo !== false);
       if(!doc.exists){
         ref.set({
           correo: user.email, nombre: user.email.split('@')[0], creadoEn: new Date().toISOString(),
-          puedeCrearUsuarios: false, activo: true, ultimoAcceso: new Date().toISOString()
+          puedeCrearUsuarios: false, activo: false, ultimoAcceso: new Date().toISOString()
         }, { merge: true }).catch(()=>{});
       } else {
         ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
