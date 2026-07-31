@@ -103,11 +103,14 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
 
 /* login / gestión de usuarios (modales opcionales) */
 #loginScreen, #userMgmtScreen{position:fixed;inset:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:rgba(59,15,48,.94);padding:20px;z-index:9000;}
-.login-card{position:relative;background:var(--paper);border-radius:12px;padding:34px 30px;max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.login-card{position:relative;background:var(--paper);border-radius:12px;padding:34px 30px;max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25);}
+.mgmt-card{display:flex;flex-direction:column;max-height:88vh;padding-bottom:0;}
+.mgmt-card-header{flex:0 0 auto;}
+.mgmt-card-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:30px;}
 .login-card h1{font-family:'Fraunces',serif;font-size:24px;margin:0 0 4px;color:var(--green-dark);}
 .login-card .sub{color:var(--muted);font-size:13.5px;margin:0 0 20px;line-height:1.5;}
 .login-card label{margin-top:10px;}
-.modal-close{position:sticky;top:0;float:right;margin:-10px -8px -22px 0;background:var(--paper);border:none;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;z-index:2;}
+.modal-close{position:absolute;top:10px;right:12px;background:none;border:none;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;}
 .login-swap{font-size:12px;color:var(--muted);text-align:center;margin-top:16px;}
 .login-swap a{color:var(--cherry);text-decoration:underline;cursor:pointer;}
 .user-list-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:13.5px;}
@@ -274,23 +277,27 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
 </div>
 
 <div id="userMgmtScreen" style="display:none;">
-  <div class="login-card" style="max-width:440px;">
-    <button class="modal-close" id="btnCerrarMgmt" title="Cerrar">×</button>
-    <h1 style="font-size:20px;">Gestionar usuarios</h1>
-    <p class="sub">Estos son los usuarios que pueden trabajar en el cuaderno. Los datos del huerto son los mismos para todos, esto solo controla quién puede entrar a registrar.</p>
-    <div id="listaUsuariosSistema" style="margin-bottom:18px;"></div>
-    <div id="solicitudesPendientesWrap" style="display:none;margin-bottom:18px;">
-      <h1 style="font-size:15px;">📩 Solicitudes de nuevo usuario pendientes</h1>
-      <div id="solicitudesPendientesContent"></div>
+  <div class="login-card mgmt-card" style="max-width:440px;">
+    <div class="mgmt-card-header">
+      <button class="modal-close" id="btnCerrarMgmt" title="Cerrar">×</button>
+      <h1 style="font-size:20px;">Gestionar usuarios</h1>
+      <p class="sub">Estos son los usuarios que pueden trabajar en el cuaderno. Los datos del huerto son los mismos para todos, esto solo controla quién puede entrar a registrar.</p>
     </div>
-    <h1 style="font-size:15px;margin-top:8px;" id="tituloAgregarUsuario">Agregar nuevo usuario</h1>
-    <p class="sub" id="subAgregarUsuario" style="display:none;">Esto no crea la cuenta de inmediato — queda como solicitud pendiente hasta que el administrador la acepte.</p>
-    <label>Correo electrónico</label>
-    <input type="email" id="nuevoUsuarioMgmt" placeholder="Ej: maria@correo.com" autocomplete="off">
-    <label>Contraseña</label>
-    <input type="password" id="nuevoPasswordMgmt" placeholder="••••••••" autocomplete="new-password">
-    <div class="actions">
-      <button class="btn btn-primary" id="btnAgregarUsuarioMgmt" style="width:100%;">+ Agregar usuario</button>
+    <div class="mgmt-card-scroll">
+      <div id="listaUsuariosSistema" style="margin-bottom:18px;"></div>
+      <div id="solicitudesPendientesWrap" style="display:none;margin-bottom:18px;">
+        <h1 style="font-size:15px;">📩 Solicitudes de nuevo usuario pendientes</h1>
+        <div id="solicitudesPendientesContent"></div>
+      </div>
+      <h1 style="font-size:15px;margin-top:8px;" id="tituloAgregarUsuario">Agregar nuevo usuario</h1>
+      <p class="sub" id="subAgregarUsuario" style="display:none;">Esto no crea la cuenta de inmediato — queda como solicitud pendiente hasta que el administrador la acepte.</p>
+      <label>Correo electrónico</label>
+      <input type="email" id="nuevoUsuarioMgmt" placeholder="Ej: maria@correo.com" autocomplete="off">
+      <label>Contraseña</label>
+      <input type="password" id="nuevoPasswordMgmt" placeholder="••••••••" autocomplete="new-password">
+      <div class="actions">
+        <button class="btn btn-primary" id="btnAgregarUsuarioMgmt" style="width:100%;">+ Agregar usuario</button>
+      </div>
     </div>
   </div>
 </div>
