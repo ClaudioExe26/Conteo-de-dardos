@@ -258,6 +258,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
       <div class="actions">
         <button class="btn btn-primary" id="btnLogin" style="width:100%;">Ingresar →</button>
       </div>
+      <p class="login-swap"><a href="#" id="linkOlvideContrasena">¿Olvidaste tu contraseña?</a></p>
       <p class="login-swap">¿No tienes cuenta todavía? Puedes <a href="#" id="linkCrearPrimero">crear una cuenta nueva</a>, quedará pendiente hasta que el administrador te dé acceso.</p>
     </div>
 
@@ -336,6 +337,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
     <div class="user-badge" id="authLogged" style="display:none;">
       <span id="usuarioBadgeTxt">🧑‍🌾 —</span>
       <button id="btnGestionUsuarios">Gestionar usuarios <span id="badgeSolicitudes" style="display:none;background:#B00020;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></button>
+      <button id="btnCambiarPassword">Cambiar contraseña</button>
       <button id="btnCambiarUsuario">Cerrar sesión</button>
     </div>
   </div>
@@ -2608,8 +2610,39 @@ $('linkCrearPrimero').addEventListener('click', (e)=>{
   $('loginModoIngreso').style.display='none';
   $('loginModoCrear').style.display='block';
 });
+$('linkOlvideContrasena').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const correo = $('loginUsuario').value.trim();
+  if(!correo){ alert('Primero escribe tu correo en el campo de arriba, luego haz clic en este link de nuevo.'); return; }
+  try{
+    await auth.sendPasswordResetEmail(correo);
+    alert('Listo. Si '+correo+' tiene una cuenta creada, te llegará un correo con instrucciones para elegir una nueva contraseña (revisa también spam).');
+  }catch(e){ alert(mensajeErrorAuth(e)); }
+});
 $('btnCerrarLogin').addEventListener('click', cerrarLogin);
 $('btnAbrirLoginHeader').addEventListener('click', ()=> abrirLogin(null));
+$('btnCambiarPassword').addEventListener('click', async ()=>{
+  const nueva = prompt('Escribe tu nueva contraseña (mínimo 6 caracteres):');
+  if(!nueva) return;
+  if(nueva.length < 6){ alert('La contraseña debe tener al menos 6 caracteres.'); return; }
+  try{
+    await auth.currentUser.updatePassword(nueva);
+    alert('Contraseña actualizada correctamente.');
+  }catch(e){
+    if(e.code === 'auth/requires-recent-login'){
+      const actual = prompt('Por seguridad, escribe tu contraseña ACTUAL para confirmar el cambio:');
+      if(!actual) return;
+      try{
+        const cred = firebase.auth.EmailAuthProvider.credential(correoActual, actual);
+        await auth.currentUser.reauthenticateWithCredential(cred);
+        await auth.currentUser.updatePassword(nueva);
+        alert('Contraseña actualizada correctamente.');
+      }catch(e2){ alert(mensajeErrorAuth(e2)); }
+    } else {
+      alert(mensajeErrorAuth(e));
+    }
+  }
+});
 $('btnCambiarUsuario').addEventListener('click', async ()=>{
   if(!confirm('¿Cerrar sesión? No se pierde ningún dato registrado.')) return;
   await auth.signOut();
