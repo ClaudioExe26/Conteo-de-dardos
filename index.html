@@ -1011,6 +1011,10 @@ function irATab(view){
     abrirLogin(view);
     return;
   }
+  if(VISTAS_PROTEGIDAS.includes(view) && usuarioActual && !usuarioAutorizadoActual){
+    alert('Tu cuenta fue creada pero todavía no ha sido autorizada por el administrador para registrar datos. Avísale a cespinoza@frutea.cl para que active tu acceso.');
+    return;
+  }
   activarVista(view);
   if(view==='v-inicio') renderInicio();
   if(view==='v-historial') renderHistorial();
@@ -2488,6 +2492,7 @@ let usuarioActual = null;   // nombre para mostrar (o el correo si no hay nombre
 let correoActual = null;    // correo real autenticado, usado para permisos
 let puedeCrearUsuariosActual = false; // permiso delegado por el admin para solicitar nuevos usuarios
 let esAdminSecundarioActual = false; // rol delegado por el admin principal: ve panel resumen y edita ficha varietal, nada más
+let usuarioAutorizadoActual = true; // false = cuenta creada pero el admin aún no le da acceso a registrar datos
 function tieneAccesoAdminPanel(){ return correoActual === ADMIN_EMAIL || esAdminSecundarioActual; }
 let vistaPendienteLogin = null;
 
@@ -2552,7 +2557,7 @@ async function crearPrimerUsuario(){
     const cred = await auth.createUserWithEmailAndPassword(correo, password);
     await db.collection('usuarios').doc(cred.user.uid).set({
       correo, nombre: correo.split('@')[0], creadoEn: new Date().toISOString(),
-      puedeCrearUsuarios: false, ultimoAcceso: new Date().toISOString()
+      puedeCrearUsuarios: false, activo: true, ultimoAcceso: new Date().toISOString()
     });
     await onLoginExitoso(cred.user);
   }catch(e){ alert(mensajeErrorAuth(e)); }
@@ -2565,7 +2570,18 @@ async function onLoginExitoso(user){
   correoActual = user.email;
   puedeCrearUsuariosActual = doc.exists ? !!doc.data().puedeCrearUsuarios : false;
   esAdminSecundarioActual = doc.exists ? !!doc.data().esAdminSecundario : false;
-  ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
+  usuarioAutorizadoActual = (correoActual === ADMIN_EMAIL) || !doc.exists || doc.data().activo !== false;
+  if(!doc.exists){
+    // Usuario que ya existía en Authentication pero nunca había iniciado sesión en esta versión de la app:
+    // se crea su ficha completa en Firestore para que aparezca correctamente en "Gestionar usuarios".
+    // Se marca como ya autorizado porque ya venía trabajando antes de esta función.
+    ref.set({
+      correo: user.email, nombre: user.email.split('@')[0], creadoEn: new Date().toISOString(),
+      puedeCrearUsuarios: false, activo: true, ultimoAcceso: new Date().toISOString()
+    }, { merge: true }).catch(()=>{});
+  } else {
+    ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
+  }
   actualizarHeaderAuth();
   chequearSolicitudesPendientes();
   $('loginScreen').style.display='none';
@@ -2592,6 +2608,7 @@ $('btnCambiarUsuario').addEventListener('click', async ()=>{
   correoActual = null;
   puedeCrearUsuariosActual = false;
   esAdminSecundarioActual = false;
+  usuarioAutorizadoActual = true;
   actualizarHeaderAuth();
   if($('badgeSolicitudes')) $('badgeSolicitudes').style.display='none';
   irATab('v-inicio');
@@ -2607,7 +2624,15 @@ if(window.__FIREBASE_OK__){
       correoActual = user.email;
       puedeCrearUsuariosActual = doc.exists ? !!doc.data().puedeCrearUsuarios : false;
       esAdminSecundarioActual = doc.exists ? !!doc.data().esAdminSecundario : false;
-      ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
+      usuarioAutorizadoActual = (correoActual === ADMIN_EMAIL) || !doc.exists || doc.data().activo !== false;
+      if(!doc.exists){
+        ref.set({
+          correo: user.email, nombre: user.email.split('@')[0], creadoEn: new Date().toISOString(),
+          puedeCrearUsuarios: false, activo: true, ultimoAcceso: new Date().toISOString()
+        }, { merge: true }).catch(()=>{});
+      } else {
+        ref.set({ ultimoAcceso: new Date().toISOString() }, { merge: true }).catch(()=>{});
+      }
       actualizarHeaderAuth();
       chequearSolicitudesPendientes();
       refrescarVistaActual();
@@ -2646,11 +2671,14 @@ async function renderListaUsuariosMgmt(){
     usuarios.sort((a,b)=> (b.ultimoAcceso||'').localeCompare(a.ultimoAcceso||''));
     $('listaUsuariosSistema').innerHTML = usuarios.map(u=>{
       const esEsteAdmin = u.correo === ADMIN_EMAIL;
+      const activo = esEsteAdmin || u.activo !== false;
       const roles = [];
       if(esEsteAdmin) roles.push('👑 admin principal');
       if(!esEsteAdmin && u.esAdminSecundario) roles.push('🛡️ admin secundario');
       if(!esEsteAdmin && u.puedeCrearUsuarios) roles.push('🔑 puede solicitar usuarios');
+      if(!esEsteAdmin) roles.push(activo ? '✅ acceso activo' : '⏳ pendiente de activar');
       const controlesAdmin = (esAdmin && !esEsteAdmin) ? `
+          <button class="icon-edit" onclick="toggleActivoMgmt('${u.uid}', ${activo})">${activo? 'desactivar acceso':'✔ activar acceso'}</button>
           <button class="icon-edit" onclick="toggleAdminSecundarioMgmt('${u.uid}', ${!!u.esAdminSecundario})">${u.esAdminSecundario? 'quitar admin secundario':'hacer admin secundario'}</button>
           <button class="icon-edit" onclick="toggleCrearUsuariosMgmt('${u.uid}', ${!!u.puedeCrearUsuarios})">${u.puedeCrearUsuarios? 'quitar permiso de solicitar':'dar permiso de solicitar'}</button>
           <button class="icon-del" onclick="eliminarUsuarioMgmt('${u.uid}','${u.correo}')">quitar acceso</button>` : '';
@@ -2715,14 +2743,14 @@ window.aceptarSolicitud = async (id)=>{
     const cred = await auth2.createUserWithEmailAndPassword(s.correoSolicitado, s.passwordSolicitada);
     await db.collection('usuarios').doc(cred.user.uid).set({
       correo: s.correoSolicitado, nombre: s.correoSolicitado.split('@')[0], creadoEn: new Date().toISOString(),
-      puedeCrearUsuarios: false, ultimoAcceso: null
+      puedeCrearUsuarios: false, activo: false, ultimoAcceso: null
     });
     await auth2.signOut();
     await db.collection('solicitudesUsuario').doc(id).delete();
     renderListaUsuariosMgmt();
     renderSolicitudesPendientes();
     chequearSolicitudesPendientes();
-    alert('Usuario creado y solicitud aprobada.');
+    alert('Usuario creado. Todavía no puede registrar datos: actívalo desde la lista de usuarios cuando quieras darle acceso.');
   }catch(e){ alert(mensajeErrorAuth(e)); }
 };
 window.rechazarSolicitud = async (id)=>{
@@ -2733,6 +2761,11 @@ window.rechazarSolicitud = async (id)=>{
   chequearSolicitudesPendientes();
 };
 
+window.toggleActivoMgmt = async (uid, actual)=>{
+  if(correoActual !== ADMIN_EMAIL){ alert('Solo el usuario administrador principal puede activar o desactivar el acceso.'); return; }
+  await db.collection('usuarios').doc(uid).set({ activo: !actual }, { merge: true });
+  renderListaUsuariosMgmt();
+};
 window.toggleAdminSecundarioMgmt = async (uid, actual)=>{
   if(correoActual !== ADMIN_EMAIL){ alert('Solo el usuario administrador principal puede otorgar este rol.'); return; }
   await db.collection('usuarios').doc(uid).set({ esAdminSecundario: !actual }, { merge: true });
@@ -2772,12 +2805,12 @@ $('btnAgregarUsuarioMgmt').addEventListener('click', async ()=>{
       const cred = await auth2.createUserWithEmailAndPassword(correo, password);
       await db.collection('usuarios').doc(cred.user.uid).set({
         correo, nombre: correo.split('@')[0], creadoEn: new Date().toISOString(),
-        puedeCrearUsuarios: false, ultimoAcceso: null
+        puedeCrearUsuarios: false, activo: false, ultimoAcceso: null
       });
       await auth2.signOut();
       $('nuevoUsuarioMgmt').value=''; $('nuevoPasswordMgmt').value='';
       renderListaUsuariosMgmt();
-      alert('Usuario creado correctamente.');
+      alert('Usuario creado. Todavía no puede registrar datos: actívalo desde la lista de usuarios cuando quieras darle acceso.');
     }catch(e){ alert(mensajeErrorAuth(e)); }
   } else {
     try{
