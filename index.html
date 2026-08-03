@@ -373,6 +373,15 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
       <button class="btn btn-secondary" id="btnExportarTodo">📥 Exportar todo (cuarteles + historial + ficha varietal + cambios)</button>
       <div id="panelAdminContent"></div>
     </div>
+    <div class="card" id="panelProduccionCard" style="display:none;">
+      <h2>🍒 Resumen de producción — temporada en curso</h2>
+      <p class="sub" id="panelProduccionSub">Estimado a partir de tus conteos registrados. Solo visible para admin y admin secundario.</p>
+      <div class="summary-strip" id="panelProduccionResumen" style="margin-bottom:14px;"></div>
+      <div class="progress-bar"><div class="fill" id="panelProduccionFill" style="width:0%"></div></div>
+      <p class="sub" id="panelProduccionAvanceTxt" style="margin-top:6px;"></p>
+      <button class="btn btn-secondary" id="btnExportarProduccion" style="margin-top:10px;">📥 Exportar resumen a Excel</button>
+      <div id="panelProduccionDetalle" style="margin-top:14px;"></div>
+    </div>
     <div class="card">
       <h2>Portal de carga productiva — por variedad</h2>
       <p class="sub">Promedio de dardos por planta y kg/ha estimado, agrupado por variedad, con todos tus conteos registrados.</p>
@@ -1794,8 +1803,11 @@ async function renderInicio(){
     $('panelAdminCard').style.display = 'block';
     $('btnExportarTodo').style.display = (correoActual === ADMIN_EMAIL) ? 'inline-block' : 'none';
     await renderPanelAdmin(conteos, cuarteles, cMap);
+    $('panelProduccionCard').style.display = 'block';
+    await renderPanelProduccion(conteos, cuarteles, cMap);
   } else {
     $('panelAdminCard').style.display = 'none';
+    $('panelProduccionCard').style.display = 'none';
   }
 }
 
@@ -1911,6 +1923,115 @@ async function renderPanelAdmin(conteos, cuarteles, cMap){
     ${usuariosHtml}
   `;
 }
+
+async function renderPanelProduccion(conteos, cuarteles, cMap){
+  const cuartelesActivos = cuarteles.filter(isActivo);
+  const temporadas = [...new Set(conteos.map(c=>c.temporada).filter(Boolean))].sort();
+  const tempReciente = temporadas[temporadas.length-1];
+  $('panelProduccionSub').textContent = tempReciente
+    ? `Estimado a partir de tus conteos registrados en la temporada ${tempReciente}. Solo visible para admin y admin secundario.`
+    : 'Aún no hay conteos registrados en ninguna temporada.';
+
+  if(!tempReciente){
+    $('panelProduccionResumen').innerHTML = '<div class="empty">Todavía no hay conteos para calcular un resumen.</div>';
+    $('panelProduccionFill').style.width = '0%';
+    $('panelProduccionAvanceTxt').textContent = '';
+    $('panelProduccionDetalle').innerHTML = '';
+    window.__prodExportRows = [];
+    return;
+  }
+
+  // Para cada cuartel activo, tomamos su conteo más reciente de esta temporada (si tiene más de uno)
+  const conteosTemp = conteos.filter(c=>c.temporada===tempReciente);
+  const porCuartel = {};
+  conteosTemp.forEach(c=>{
+    const actual = porCuartel[c.cuartelId];
+    if(!actual || (c.fecha||'') > (actual.fecha||'')) porCuartel[c.cuartelId] = c;
+  });
+
+  const coefCache = {};
+  let kgTotalTemporada = 0;
+  let kgHaSumaPonderada = 0, haConEstimado = 0;
+  const filasDetalle = [];
+
+  for(const cu of cuartelesActivos){
+    const c = porCuartel[cu.id];
+    const contado = !!c;
+    let kgHa=null, kgTotalCuartel=null, fuente='—';
+    if(contado){
+      if(!(cu.variedad in coefCache)) coefCache[cu.variedad] = await coefCalibrado(cu.variedad, cuarteles, conteos);
+      const tieneYemaFila = !!(c.analisisYema && c.analisisYema.activo);
+      let baseOverride = null;
+      if(tieneYemaFila){
+        const ay = c.analisisYema;
+        baseOverride = { dardo: (parseFloat(ay.frutos_dardo)||0)*(parseFloat(ay.peso_fruto)||0)/1000, ramilla: (parseFloat(ay.flores_ramilla)||0)*(parseFloat(ay.cuajado)||0)*(parseFloat(ay.peso_fruto)||0)/1000 };
+      }
+      const est = await calcularEstimacionConteo(c, cu, coefCache[cu.variedad], baseOverride);
+      if(est){
+        kgHa = est.kgHa;
+        fuente = est.fuente==='propio' ? 'real' : (est.fuente==='calibrado' ? 'calibrado' : 'referencial');
+        if(kgHa!=null && cu.hectareas){
+          kgTotalCuartel = kgHa * parseFloat(cu.hectareas);
+          kgTotalTemporada += kgTotalCuartel;
+          kgHaSumaPonderada += kgHa * parseFloat(cu.hectareas);
+          haConEstimado += parseFloat(cu.hectareas);
+        }
+      }
+    }
+    filasDetalle.push({
+      zona: cu.zona||'', productor: cu.productor||'', cuartel: cu.nombre, variedad: cu.variedad,
+      hectareas: cu.hectareas||'', estado: contado?'Contado':'Sin contar',
+      kgHa: kgHa!=null? kgHa.toFixed(0) : '', kgTotal: kgTotalCuartel!=null? kgTotalCuartel.toFixed(0) : '', fuente
+    });
+  }
+
+  const totalCuarteles = cuartelesActivos.length;
+  const contadosCount = Object.keys(porCuartel).filter(id=>cuartelesActivos.some(c=>c.id===id)).length;
+  const pct = totalCuarteles ? Math.round((contadosCount/totalCuarteles)*100) : 0;
+  const kgHaPromedio = haConEstimado ? (kgHaSumaPonderada/haConEstimado) : null;
+
+  $('panelProduccionResumen').innerHTML = `
+    <div class="box"><div class="v">${kgTotalTemporada? Math.round(kgTotalTemporada).toLocaleString('es-CL') : 's/d'}</div><div class="l">kg totales estimados</div></div>
+    <div class="box"><div class="v">${kgHaPromedio!=null? Math.round(kgHaPromedio).toLocaleString('es-CL') : 's/d'}</div><div class="l">kg/ha promedio</div></div>
+    <div class="box"><div class="v">${contadosCount} de ${totalCuarteles}</div><div class="l">cuarteles contados</div></div>
+  `;
+  $('panelProduccionFill').style.width = pct+'%';
+  $('panelProduccionAvanceTxt').textContent = `${pct}% de avance de conteo (${contadosCount} de ${totalCuarteles} cuarteles activos ya tienen al menos un conteo esta temporada).`;
+
+  $('panelProduccionDetalle').innerHTML = `
+    <h2 style="font-size:14px;">Detalle por cuartel</h2>
+    <table><thead><tr><th>Zona</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Ha</th><th>Estado</th><th>Kg/ha est.</th><th>Kg total est.</th></tr></thead><tbody>
+    ${filasDetalle.map(f=>`<tr>
+      <td class="txt">${f.zona||'—'}</td><td class="txt">${f.productor||'—'}</td><td class="txt">${f.cuartel}</td><td class="txt">${f.variedad}</td>
+      <td>${f.hectareas}</td><td class="txt">${f.estado}</td><td>${f.kgHa||'s/d'}</td><td>${f.kgTotal||'s/d'}</td>
+    </tr>`).join('')}
+    </tbody></table>
+  `;
+
+  window.__prodExportRows = filasDetalle;
+  window.__prodResumenExport = { temporada: tempReciente, kgTotalTemporada, kgHaPromedio, contadosCount, totalCuarteles, pct };
+}
+
+$('btnExportarProduccion')?.addEventListener('click', ()=>{
+  const rows = window.__prodExportRows || [];
+  const r = window.__prodResumenExport;
+  if(!r || rows.length===0){ alert('No hay datos para exportar todavía.'); return; }
+  const filasConTotal = [...rows, {
+    zona:'', productor:'', cuartel:'TOTAL / PROMEDIO', variedad:'', hectareas:'',
+    estado: `${r.contadosCount} de ${r.totalCuarteles} (${r.pct}%)`,
+    kgHa: r.kgHaPromedio!=null? Math.round(r.kgHaPromedio) : '',
+    kgTotal: r.kgTotalTemporada? Math.round(r.kgTotalTemporada) : '', fuente:''
+  }];
+  exportarExcel(`resumen_produccion_${r.temporada}.xlsx`, [{
+    nombre: 'ResumenProduccion',
+    columnas: [
+      {header:'Zona', key:'zona'}, {header:'Productor', key:'productor'}, {header:'Cuartel', key:'cuartel'},
+      {header:'Variedad', key:'variedad'}, {header:'Hectáreas', key:'hectareas'}, {header:'Estado', key:'estado'},
+      {header:'Kg/ha estimado', key:'kgHa'}, {header:'Kg total estimado', key:'kgTotal'}, {header:'Fuente', key:'fuente'}
+    ],
+    filas: filasConTotal
+  }]);
+});
 
 async function calcularResumenGrupo(conteosGrupo, cuartelesAll, conteosAll, coefCache){
   const estimaciones = [];
