@@ -718,6 +718,15 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
       <h2>Factor de edad de la plantación</h2>
       <p class="sub">Los dardos y ramillas de plantas jóvenes producen por debajo de su potencial hasta alcanzar plena carga (~año 7). Editable si tu portainjerto/densidad difiere del estándar.</p>
       <div id="edadTableWrap"></div>
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn btn-primary" id="btnGuardarEdad">💾 Guardar cambios</button>
+        <button class="btn btn-secondary" id="btnResetEdad">Restaurar valores referenciales por defecto</button>
+        <button class="btn btn-secondary" id="btnVerHistorialEdad">🕒 Ver historial de cambios</button>
+      </div>
+      <div id="historialFichaWrapEdad" style="display:none;margin-top:14px;">
+        <h2 style="font-size:14px;">Historial de cambios (últimos 60)</h2>
+        <div id="historialFichaContentEdad"></div>
+      </div>
     </div>
     <div class="card">
       <h2>Criterio de tamaño de muestra</h2>
@@ -904,18 +913,20 @@ async function registrarCambioFicha(variedad, campo, valorAnterior, valorNuevo){
 
 async function renderHistorialFicha(){
   const cont = $('historialFichaContent');
-  cont.innerHTML = '<div class="empty">Cargando…</div>';
+  const cont2 = $('historialFichaContentEdad');
+  const setBoth = (html)=>{ cont.innerHTML = html; if(cont2) cont2.innerHTML = html; };
+  setBoth('<div class="empty">Cargando…</div>');
   try{
     const snap = await db.collection('historialFicha').orderBy('fecha','desc').limit(60).get();
     const items = snap.docs.map(d=>d.data());
-    if(items.length===0){ cont.innerHTML = '<div class="empty">Aún no hay cambios registrados.</div>'; return; }
-    cont.innerHTML = items.map(it=>`
+    if(items.length===0){ setBoth('<div class="empty">Aún no hay cambios registrados.</div>'); return; }
+    setBoth(items.map(it=>`
       <div class="user-list-item" style="flex-direction:column;align-items:stretch;gap:2px;">
         <div style="display:flex;justify-content:space-between;"><b>${it.variedad}</b><span style="color:var(--muted);font-size:11px;">${formatFecha(it.fecha)}</span></div>
         <div style="font-size:12.5px;">${it.campo}: <span style="color:var(--muted);">${it.valorAnterior}</span> → <b>${it.valorNuevo}</b></div>
         <div style="font-size:11px;color:var(--muted);">por ${it.usuario||it.correo||'—'}</div>
-      </div>`).join('');
-  }catch(e){ cont.innerHTML = '<div class="empty">No se pudo cargar el historial (puede requerir crear un índice en Firestore la primera vez — revisa la consola).</div>'; }
+      </div>`).join(''));
+  }catch(e){ setBoth('<div class="empty">No se pudo cargar el historial (puede requerir crear un índice en Firestore la primera vez — revisa la consola).</div>'); }
 }
 
 function densidadDe(cuartel){
@@ -1941,12 +1952,14 @@ async function renderPanelProduccion(conteos, cuarteles, cMap){
     return;
   }
 
-  // Para cada cuartel activo, tomamos su conteo más reciente de esta temporada (si tiene más de uno)
+  // Para cada cuartel activo, combinamos todas las labores del mismo día (si 2+ personas contaron
+  // el mismo cuartel el mismo día) y nos quedamos con el día más reciente de esta temporada.
   const conteosTemp = conteos.filter(c=>c.temporada===tempReciente);
+  const gruposTemp = agruparConteosPorDia(conteosTemp);
   const porCuartel = {};
-  conteosTemp.forEach(c=>{
-    const actual = porCuartel[c.cuartelId];
-    if(!actual || (c.fecha||'') > (actual.fecha||'')) porCuartel[c.cuartelId] = c;
+  gruposTemp.forEach(g=>{
+    const actual = porCuartel[g.cuartelId];
+    if(!actual || (g.fecha||'') > (actual.fecha||'')) porCuartel[g.cuartelId] = g;
   });
 
   const coefCache = {};
@@ -1960,10 +1973,11 @@ async function renderPanelProduccion(conteos, cuarteles, cMap){
     let kgHa=null, kgTotalCuartel=null, fuente='—';
     if(contado){
       if(!(cu.variedad in coefCache)) coefCache[cu.variedad] = await coefCalibrado(cu.variedad, cuarteles, conteos);
-      const tieneYemaFila = !!(c.analisisYema && c.analisisYema.activo);
+      const docYema = c.docYemaRef;
+      const tieneYemaFila = !!(docYema && docYema.analisisYema && docYema.analisisYema.activo);
       let baseOverride = null;
       if(tieneYemaFila){
-        const ay = c.analisisYema;
+        const ay = docYema.analisisYema;
         baseOverride = { dardo: (parseFloat(ay.frutos_dardo)||0)*(parseFloat(ay.peso_fruto)||0)/1000, ramilla: (parseFloat(ay.flores_ramilla)||0)*(parseFloat(ay.cuajado)||0)*(parseFloat(ay.peso_fruto)||0)/1000 };
       }
       const est = await calcularEstimacionConteo(c, cu, coefCache[cu.variedad], baseOverride);
@@ -1980,7 +1994,7 @@ async function renderPanelProduccion(conteos, cuarteles, cMap){
     }
     filasDetalle.push({
       zona: cu.zona||'', productor: cu.productor||'', cuartel: cu.nombre, variedad: cu.variedad,
-      hectareas: cu.hectareas||'', estado: contado?'Contado':'Sin contar',
+      hectareas: cu.hectareas||'', estado: contado?(c.registrantes.length>1? `Contado (${c.registrantes.join(' + ')})` : 'Contado') : 'Sin contar',
       kgHa: kgHa!=null? kgHa.toFixed(0) : '', kgTotal: kgTotalCuartel!=null? kgTotalCuartel.toFixed(0) : '', fuente
     });
   }
@@ -2177,6 +2191,8 @@ function renderReferencia(){
 
   $('btnGuardarRef').style.display = editable ? 'inline-block' : 'none';
   $('btnResetRef').style.display = editable ? 'inline-block' : 'none';
+  if($('btnGuardarEdad')) $('btnGuardarEdad').style.display = editable ? 'inline-block' : 'none';
+  if($('btnResetEdad')) $('btnResetEdad').style.display = editable ? 'inline-block' : 'none';
 
   let mhtml = '<table><thead><tr><th>Superficie del cuartel</th><th>Plantas sugeridas a muestrear</th></tr></thead><tbody>';
   MUESTRA_TABLA_REF.forEach(r=> mhtml += `<tr><td class="txt">${r.ha}</td><td class="txt">${r.n}</td></tr>`);
@@ -2185,6 +2201,35 @@ function renderReferencia(){
 }
 
 /* ---------- ESTIMACIONES AUTOMÁTICAS DESDE EL HISTORIAL ---------- */
+// Cuando 2+ personas cuentan el mismo cuartel el mismo día (cada una registra su propia "labor"),
+// esta función las combina en un solo bloque para que el Estimador y el Resumen de producción
+// calculen el promedio sobre el TOTAL de plantas contadas ese día, no por labor por separado.
+// El Historial NO usa esta función: ahí cada labor sigue mostrándose por separado como registro de auditoría.
+function agruparConteosPorDia(conteos){
+  const grupos = {};
+  conteos.forEach(c=>{
+    const key = `${c.cuartelId}|${c.fecha||''}|${c.temporada||''}`;
+    if(!grupos[key]){
+      grupos[key] = {
+        cuartelId: c.cuartelId, fecha: c.fecha||'', temporada: c.temporada||'',
+        muestras: [], docsOriginales: [], registrantes: new Set(), kgreal: null, docYemaRef: null
+      };
+    }
+    const g = grupos[key];
+    g.muestras.push(...(c.muestras||[]));
+    g.docsOriginales.push(c);
+    if(c.usuario||c.responsable) g.registrantes.add(c.usuario||c.responsable);
+    if(g.kgreal==null && c.kgreal) g.kgreal = c.kgreal;
+    // Si más de una labor de ese día tiene análisis de yema activo, se usa la última encontrada.
+    if(c.analisisYema && c.analisisYema.activo) g.docYemaRef = c;
+  });
+  return Object.values(grupos).map(g=>{
+    if(!g.docYemaRef) g.docYemaRef = g.docsOriginales[0];
+    g.registrantes = [...g.registrantes];
+    return g;
+  });
+}
+
 async function calcularEstimacionConteo(c, cu, calibradoPre, baseOverride){
   if(!c.muestras || c.muestras.length===0 || !cu) return null;
   const n = c.muestras.length;
@@ -2293,41 +2338,45 @@ async function renderEstimacionesHistorial(){
       return cu && (!selV||cu.variedad===selV) && (!selT||c.temporada===selT) && (!selP||cu.productor===selP);
     });
     if(filt.length===0){ $('estimacionesHistWrap').innerHTML = '<div class="empty">Aún no hay conteos registrados para este filtro. Ve a "Registrar conteo" para cargar el primero.</div>'; return; }
-    let html = '<table><thead><tr><th>Fecha</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Temporada</th><th>Dardos/pl.</th><th>Ramillas/pl.</th><th>Kg/planta est.</th><th>Kg/ha bruto</th><th>Kg/ha exportable</th><th>Análisis yema</th><th>Coef.</th></tr></thead><tbody>';
+    const grupos = agruparConteosPorDia(filt);
+    let html = '<table><thead><tr><th>Fecha</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Temporada</th><th>Registrado por</th><th>Dardos/pl.</th><th>Ramillas/pl.</th><th>Kg/planta est.</th><th>Kg/ha bruto</th><th>Kg/ha exportable</th><th>Análisis yema</th><th>Coef.</th></tr></thead><tbody>';
     const coefCache = {};
     const exportRows = [];
-    for(const c of filt){
-      const cu = cMap[c.cuartelId];
-      const tieneYemaFila = !!(c.analisisYema && c.analisisYema.activo);
+    for(const g of grupos){
+      const cu = cMap[g.cuartelId];
+      const docYema = g.docYemaRef;
+      const tieneYemaFila = !!(docYema && docYema.analisisYema && docYema.analisisYema.activo);
       let baseOverride = null;
       if(tieneYemaFila){
-        const ay = c.analisisYema;
+        const ay = docYema.analisisYema;
         baseOverride = { dardo: (parseFloat(ay.frutos_dardo)||0)*(parseFloat(ay.peso_fruto)||0)/1000, ramilla: (parseFloat(ay.flores_ramilla)||0)*(parseFloat(ay.cuajado)||0)*(parseFloat(ay.peso_fruto)||0)/1000 };
       }
       if(!baseOverride && !(cu.variedad in coefCache)){
         coefCache[cu.variedad] = await coefCalibrado(cu.variedad, cuarteles, conteos);
       }
-      const est = await calcularEstimacionConteo(c, cu, coefCache[cu.variedad], baseOverride);
+      const est = await calcularEstimacionConteo(g, cu, coefCache[cu.variedad], baseOverride);
       if(!est) continue;
       const kgHaExport = est.kgHa!=null ? est.kgHa*(pctExport/100) : null;
       const esReal = est.fuente==='propio';
       const badgeTxt = esReal ? 'real' : (est.fuente==='calibrado' ? 'calibrado' : 'referencial');
       const badgeClass = esReal ? 'badge-real' : (est.fuente==='calibrado' ? 'badge-calibrado' : 'badge-referencial');
-      exportRows.push({fecha:c.fecha||'', productor:cu.productor||'', zona:cu.zona||'', cuartel:cu.nombre, variedad:cu.variedad, temporada:c.temporada,
-        dardosProm:est.dardosProm.toFixed(1), ramillasProm:est.ramillasProm.toFixed(1), kgPlanta:est.kgPlanta.toFixed(1),
+      const registradoPorTxt = g.registrantes.join(' + ') || '—';
+      exportRows.push({fecha:g.fecha||'', productor:cu.productor||'', zona:cu.zona||'', cuartel:cu.nombre, variedad:cu.variedad, temporada:g.temporada,
+        registradoPor: registradoPorTxt, dardosProm:est.dardosProm.toFixed(1), ramillasProm:est.ramillasProm.toFixed(1), kgPlanta:est.kgPlanta.toFixed(1),
         kgHa: est.kgHa!=null? est.kgHa.toFixed(0):'', kgHaExport: kgHaExport!=null? kgHaExport.toFixed(0):'', coef: badgeTxt});
       html += `<tr>
-        <td class="txt">${c.fecha||'—'}</td>
+        <td class="txt">${g.fecha||'—'}</td>
         <td class="txt">${cu.productor||'—'}</td>
         <td class="txt">${cu.nombre}</td>
         <td class="txt">${cu.variedad}</td>
-        <td class="txt">${c.temporada}</td>
+        <td class="txt">${g.temporada}</td>
+        <td class="txt">${registradoPorTxt}${g.registrantes.length>1?' <span class="badge badge-calibrado" title="Varias personas contaron este cuartel el mismo día; los datos se combinaron">combinado</span>':''}</td>
         <td>${est.dardosProm.toFixed(1)}</td>
         <td>${est.ramillasProm.toFixed(1)}</td>
         <td>${est.kgPlanta.toFixed(1)}</td>
         <td>${est.kgHa? est.kgHa.toFixed(0) : '<span title="Falta densidad del cuartel">s/d</span>'}</td>
         <td>${kgHaExport!=null? kgHaExport.toFixed(0) : 's/d'}</td>
-        <td><select onchange="onToggleAnalisisYemaFila('${c.id}', this.value)">
+        <td><select onchange="onToggleAnalisisYemaFila('${docYema.id}', this.value)">
           <option value="no" ${!tieneYemaFila?'selected':''}>No</option>
           <option value="si" ${tieneYemaFila?'selected':''}>Sí</option>
         </select></td>
@@ -2347,6 +2396,7 @@ async function renderEstimacionesHistorial(){
       columnas: [
         {header:'Fecha', key:'fecha'}, {header:'Productor', key:'productor'}, {header:'Zona', key:'zona'},
         {header:'Cuartel', key:'cuartel'}, {header:'Variedad', key:'variedad'}, {header:'Temporada', key:'temporada'},
+        {header:'Registrado por', key:'registradoPor'},
         {header:'Dardos/planta', key:'dardosProm'}, {header:'Ramillas/planta', key:'ramillasProm'},
         {header:'Kg/planta', key:'kgPlanta'}, {header:'Kg/ha bruto', key:'kgHa'}, {header:'Kg/ha exportable', key:'kgHaExport'},
         {header:'Coeficiente', key:'coef'}
@@ -2605,32 +2655,43 @@ async function initApp(){
     $(id)?.addEventListener('input', ()=>{ if(estimacionIndependienteIniciada) estimar(true); });
     $(id)?.addEventListener('change', ()=>{ if(estimacionIndependienteIniciada) estimar(true); });
   });
-  $('btnGuardarRef').addEventListener('click', async ()=>{
-    if(!tieneAccesoAdminPanel()){ alert('Solo el usuario administrador puede editar estos valores.'); return; }
-    const okRef = await safeSet('referencia-varietal', REF);
-    const okEdad = await safeSet('factor-edad', EDAD);
-    if(okRef && okEdad){
-      alert('✔ Cambios guardados de forma permanente. Se mantendrán así hasta que tú los vuelvas a modificar.');
-    } else {
-      alert('⚠️ No se pudo guardar completamente. Revisa tu conexión a internet e inténtalo de nuevo.');
-    }
-  });
-  $('btnResetRef').addEventListener('click', async ()=>{
-    if(!tieneAccesoAdminPanel()){ alert('Solo el usuario administrador puede restaurar estos valores.'); return; }
-    if(!confirm('¿Restaurar todos los valores a los referenciales por defecto? Se perderán tus ediciones.')) return;
-    REF = JSON.parse(JSON.stringify(REF_DEFAULT));
-    EDAD = JSON.parse(JSON.stringify(EDAD_DEFAULT));
-    await safeSet('referencia-varietal', REF);
-    await safeSet('factor-edad', EDAD);
-    renderReferencia();
-  });
-  $('btnVerHistorialFicha').addEventListener('click', async ()=>{
-    const wrap = $('historialFichaWrap');
-    const abrir = wrap.style.display === 'none';
-    wrap.style.display = abrir ? 'block' : 'none';
-    if(abrir) await renderHistorialFicha();
-  });
+  $('btnGuardarRef').addEventListener('click', guardarCambiosFicha);
+  $('btnGuardarEdad')?.addEventListener('click', guardarCambiosFicha);
+  $('btnResetRef').addEventListener('click', restaurarValoresFicha);
+  $('btnResetEdad')?.addEventListener('click', restaurarValoresFicha);
+  $('btnVerHistorialFicha').addEventListener('click', toggleHistorialFicha);
+  $('btnVerHistorialEdad')?.addEventListener('click', toggleHistorialFicha);
   renderInicio();
+}
+
+async function guardarCambiosFicha(){
+  if(!tieneAccesoAdminPanel()){ alert('Solo el usuario administrador puede editar estos valores.'); return; }
+  const okRef = await safeSet('referencia-varietal', REF);
+  const okEdad = await safeSet('factor-edad', EDAD);
+  if(okRef && okEdad){
+    alert('✔ Cambios guardados de forma permanente. Se mantendrán así hasta que tú los vuelvas a modificar.');
+  } else {
+    alert('⚠️ No se pudo guardar completamente. Revisa tu conexión a internet e inténtalo de nuevo.');
+  }
+}
+
+async function restaurarValoresFicha(){
+  if(!tieneAccesoAdminPanel()){ alert('Solo el usuario administrador puede restaurar estos valores.'); return; }
+  if(!confirm('¿Restaurar todos los valores a los referenciales por defecto? Se perderán tus ediciones (tanto de variedades como del factor de edad).')) return;
+  REF = JSON.parse(JSON.stringify(REF_DEFAULT));
+  EDAD = JSON.parse(JSON.stringify(EDAD_DEFAULT));
+  await safeSet('referencia-varietal', REF);
+  await safeSet('factor-edad', EDAD);
+  renderReferencia();
+}
+
+async function toggleHistorialFicha(){
+  const wrap = $('historialFichaWrap');
+  const wrap2 = $('historialFichaWrapEdad');
+  const abrir = wrap.style.display === 'none';
+  wrap.style.display = abrir ? 'block' : 'none';
+  if(wrap2) wrap2.style.display = abrir ? 'block' : 'none';
+  if(abrir) await renderHistorialFicha();
 }
 
 window.editarConteo = editarConteo;
