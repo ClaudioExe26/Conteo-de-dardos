@@ -376,6 +376,11 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
     <div class="card" id="panelProduccionCard" style="display:none;">
       <h2>🍒 Resumen de producción — temporada en curso</h2>
       <p class="sub" id="panelProduccionSub">Estimado a partir de tus conteos registrados. Solo visible para admin y admin secundario.</p>
+      <div class="filters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <div class="field" style="flex:1;min-width:160px;"><label>Zona</label><select id="prodFiltroZona"><option value="">Todas las zonas</option></select></div>
+        <div class="field" style="flex:1;min-width:160px;"><label>Productor</label><select id="prodFiltroProd"><option value="">Todos los productores</option></select></div>
+        <div class="field" style="flex:1;min-width:160px;"><label>Variedad</label><select id="prodFiltroVar"><option value="">Todas las variedades</option></select></div>
+      </div>
       <div class="summary-strip" id="panelProduccionResumen" style="margin-bottom:14px;"></div>
       <div class="progress-bar"><div class="fill" id="panelProduccionFill" style="width:0%"></div></div>
       <p class="sub" id="panelProduccionAvanceTxt" style="margin-top:6px;"></p>
@@ -524,6 +529,12 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
     <div class="card">
       <h2>Cuarteles guardados</h2>
       <p class="sub">Selecciona "Contar ahora" para ir directo a la pestaña de conteo con este cuartel ya cargado.</p>
+      <div class="filters" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <div class="field" style="flex:1;min-width:160px;"><label>Buscar por nombre</label><input type="text" id="cuFiltroTexto" placeholder="Ej: Cuartel 4"></div>
+        <div class="field" style="flex:1;min-width:160px;"><label>Productor</label><select id="cuFiltroProd"><option value="">Todos los productores</option></select></div>
+        <div class="field" style="flex:1;min-width:160px;"><label>Zona</label><select id="cuFiltroZona"><option value="">Todas las zonas</option></select></div>
+        <div class="field" style="flex:1;min-width:160px;"><label>Variedad</label><select id="cuFiltroVar"><option value="">Todas las variedades</option></select></div>
+      </div>
       <div id="listaCuartelesWrap"></div>
     </div>
   </section>
@@ -1065,25 +1076,52 @@ function isActivo(c){ return c.activo !== false; }
 async function renderListaCuarteles(){
   const cuarteles = await listCuarteles();
   if(cuarteles.length===0){ $('listaCuartelesWrap').innerHTML = '<div class="empty">Aún no has creado ningún cuartel.</div>'; return; }
-  let html = '<table><thead><tr><th>Nombre</th><th>Productor</th><th>Zona</th><th>Variedad</th><th>Portainjerto</th><th>Año plant.</th><th>Hectáreas</th><th>Densidad aprox.</th><th>Estado</th><th></th></tr></thead><tbody>';
-  cuarteles.forEach(c=>{
-    const dens = densidadDe(c);
-    const activo = isActivo(c);
-    html += `<tr${activo?'':' style="opacity:.55;"'}>
-      <td class="txt">${c.nombre}</td>
-      <td class="txt">${c.productor||'—'}</td>
-      <td class="txt">${c.zona||'—'}</td>
-      <td class="txt">${c.variedad}</td>
-      <td class="txt">${c.portainjerto||'—'}</td>
-      <td>${c.anioplant||'—'}</td>
-      <td>${c.hectareas||'—'}</td>
-      <td>${dens? dens+' pl/ha':'—'}</td>
-      <td class="txt">${activo? '<span class="badge badge-calibrado">activo</span>' : '<span class="badge badge-referencial">archivado</span>'}</td>
-      <td><button class="icon-edit" onclick="cargarCuartelParaEditar('${c.id}')">editar</button><button class="icon-edit" onclick="irAContarCuartel('${c.id}')">contar ahora →</button><button class="icon-del" onclick="toggleArchivarCuartel('${c.id}')">${activo?'archivar':'reactivar'}</button><button class="icon-del" onclick="borrarCuartelDefinitivo('${c.id}')">eliminar</button></td>
-    </tr>`;
-  });
-  html += '</tbody></table>';
-  $('listaCuartelesWrap').innerHTML = html;
+
+  const fTxt = $('cuFiltroTexto'), fProd = $('cuFiltroProd'), fZona = $('cuFiltroZona'), fVar = $('cuFiltroVar');
+  const prods = [...new Set(cuarteles.map(c=>c.productor).filter(Boolean))].sort();
+  const zonas = [...new Set(cuarteles.map(c=>c.zona).filter(Boolean))].sort();
+  const vars = [...new Set(cuarteles.map(c=>c.variedad).filter(Boolean))].sort();
+  const selProdPrev = fProd.value, selZonaPrev = fZona.value, selVarPrev = fVar.value;
+  fProd.innerHTML = '<option value="">Todos los productores</option>' + prods.map(p=>`<option ${p===selProdPrev?'selected':''}>${p}</option>`).join('');
+  fZona.innerHTML = '<option value="">Todas las zonas</option>' + zonas.map(z=>`<option ${z===selZonaPrev?'selected':''}>${z}</option>`).join('');
+  fVar.innerHTML = '<option value="">Todas las variedades</option>' + vars.map(v=>`<option ${v===selVarPrev?'selected':''}>${v}</option>`).join('');
+
+  const draw = ()=>{
+    const txt = (fTxt.value||'').trim().toLowerCase();
+    const selP = fProd.value, selZ = fZona.value, selV = fVar.value;
+    const filt = cuarteles.filter(c=>
+      (!txt || (c.nombre||'').toLowerCase().includes(txt)) &&
+      (!selP || c.productor===selP) &&
+      (!selZ || c.zona===selZ) &&
+      (!selV || c.variedad===selV)
+    );
+    if(filt.length===0){ $('listaCuartelesWrap').innerHTML = '<div class="empty">Ningún cuartel coincide con este filtro.</div>'; return; }
+    let html = '<table><thead><tr><th>Nombre</th><th>Productor</th><th>Zona</th><th>Variedad</th><th>Portainjerto</th><th>Año plant.</th><th>Hectáreas</th><th>Densidad aprox.</th><th>Estado</th><th></th></tr></thead><tbody>';
+    filt.forEach(c=>{
+      const dens = densidadDe(c);
+      const activo = isActivo(c);
+      html += `<tr${activo?'':' style="opacity:.55;"'}>
+        <td class="txt">${c.nombre}</td>
+        <td class="txt">${c.productor||'—'}</td>
+        <td class="txt">${c.zona||'—'}</td>
+        <td class="txt">${c.variedad}</td>
+        <td class="txt">${c.portainjerto||'—'}</td>
+        <td>${c.anioplant||'—'}</td>
+        <td>${c.hectareas||'—'}</td>
+        <td>${dens? dens+' pl/ha':'—'}</td>
+        <td class="txt">${activo? '<span class="badge badge-calibrado">activo</span>' : '<span class="badge badge-referencial">archivado</span>'}</td>
+        <td><button class="icon-edit" onclick="cargarCuartelParaEditar('${c.id}')">editar</button><button class="icon-edit" onclick="irAContarCuartel('${c.id}')">contar ahora →</button><button class="icon-del" onclick="toggleArchivarCuartel('${c.id}')">${activo?'archivar':'reactivar'}</button><button class="icon-del" onclick="borrarCuartelDefinitivo('${c.id}')">eliminar</button></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    $('listaCuartelesWrap').innerHTML = html;
+  };
+
+  fTxt.oninput = draw;
+  fProd.onchange = draw;
+  fZona.onchange = draw;
+  fVar.onchange = draw;
+  draw();
 }
 window.toggleArchivarCuartel = async (id)=>{
   const c = await getCuartel(id);
@@ -1962,68 +2000,99 @@ async function renderPanelProduccion(conteos, cuarteles, cMap){
     if(!actual || (g.fecha||'') > (actual.fecha||'')) porCuartel[g.cuartelId] = g;
   });
 
-  const coefCache = {};
-  let kgTotalTemporada = 0;
-  let kgHaSumaPonderada = 0, haConEstimado = 0;
-  const filasDetalle = [];
+  const fZona = $('prodFiltroZona'), fProd = $('prodFiltroProd'), fVar = $('prodFiltroVar');
+  const zonas = [...new Set(cuartelesActivos.map(c=>c.zona).filter(Boolean))].sort();
+  const prods = [...new Set(cuartelesActivos.map(c=>c.productor).filter(Boolean))].sort();
+  const vars = [...new Set(cuartelesActivos.map(c=>c.variedad).filter(Boolean))].sort();
+  const selZonaPrev = fZona.value, selProdPrev = fProd.value, selVarPrev = fVar.value;
+  fZona.innerHTML = '<option value="">Todas las zonas</option>' + zonas.map(z=>`<option ${z===selZonaPrev?'selected':''}>${z}</option>`).join('');
+  fProd.innerHTML = '<option value="">Todos los productores</option>' + prods.map(p=>`<option ${p===selProdPrev?'selected':''}>${p}</option>`).join('');
+  fVar.innerHTML = '<option value="">Todas las variedades</option>' + vars.map(v=>`<option ${v===selVarPrev?'selected':''}>${v}</option>`).join('');
 
-  for(const cu of cuartelesActivos){
-    const c = porCuartel[cu.id];
-    const contado = !!c;
-    let kgHa=null, kgTotalCuartel=null, fuente='—';
-    if(contado){
-      if(!(cu.variedad in coefCache)) coefCache[cu.variedad] = await coefCalibrado(cu.variedad, cuarteles, conteos);
-      const docYema = c.docYemaRef;
-      const tieneYemaFila = !!(docYema && docYema.analisisYema && docYema.analisisYema.activo);
-      let baseOverride = null;
-      if(tieneYemaFila){
-        const ay = docYema.analisisYema;
-        baseOverride = { dardo: (parseFloat(ay.frutos_dardo)||0)*(parseFloat(ay.peso_fruto)||0)/1000, ramilla: (parseFloat(ay.flores_ramilla)||0)*(parseFloat(ay.cuajado)||0)*(parseFloat(ay.peso_fruto)||0)/1000 };
-      }
-      const est = await calcularEstimacionConteo(c, cu, coefCache[cu.variedad], baseOverride);
-      if(est){
-        kgHa = est.kgHa;
-        fuente = est.fuente==='propio' ? 'real' : (est.fuente==='calibrado' ? 'calibrado' : 'referencial');
-        if(kgHa!=null && cu.hectareas){
-          kgTotalCuartel = kgHa * parseFloat(cu.hectareas);
-          kgTotalTemporada += kgTotalCuartel;
-          kgHaSumaPonderada += kgHa * parseFloat(cu.hectareas);
-          haConEstimado += parseFloat(cu.hectareas);
+  const coefCache = {};
+
+  const draw = async ()=>{
+    const selZ = fZona.value, selP = fProd.value, selV = fVar.value;
+    const cuartelesFiltrados = cuartelesActivos.filter(cu=>
+      (!selZ || cu.zona===selZ) && (!selP || cu.productor===selP) && (!selV || cu.variedad===selV)
+    );
+
+    let kgTotalTemporada = 0;
+    let kgHaSumaPonderada = 0, haConEstimado = 0;
+    const filasDetalle = [];
+
+    for(const cu of cuartelesFiltrados){
+      const c = porCuartel[cu.id];
+      const contado = !!c;
+      let kgHa=null, kgTotalCuartel=null, fuente='—';
+      if(contado){
+        if(!(cu.variedad in coefCache)) coefCache[cu.variedad] = await coefCalibrado(cu.variedad, cuarteles, conteos);
+        const docYema = c.docYemaRef;
+        const tieneYemaFila = !!(docYema && docYema.analisisYema && docYema.analisisYema.activo);
+        let baseOverride = null;
+        if(tieneYemaFila){
+          const ay = docYema.analisisYema;
+          baseOverride = { dardo: (parseFloat(ay.frutos_dardo)||0)*(parseFloat(ay.peso_fruto)||0)/1000, ramilla: (parseFloat(ay.flores_ramilla)||0)*(parseFloat(ay.cuajado)||0)*(parseFloat(ay.peso_fruto)||0)/1000 };
+        }
+        const est = await calcularEstimacionConteo(c, cu, coefCache[cu.variedad], baseOverride);
+        if(est){
+          kgHa = est.kgHa;
+          fuente = est.fuente==='propio' ? 'real' : (est.fuente==='calibrado' ? 'calibrado' : 'referencial');
+          if(kgHa!=null && cu.hectareas){
+            kgTotalCuartel = kgHa * parseFloat(cu.hectareas);
+            kgTotalTemporada += kgTotalCuartel;
+            kgHaSumaPonderada += kgHa * parseFloat(cu.hectareas);
+            haConEstimado += parseFloat(cu.hectareas);
+          }
         }
       }
+      filasDetalle.push({
+        zona: cu.zona||'', productor: cu.productor||'', cuartel: cu.nombre, variedad: cu.variedad,
+        hectareas: cu.hectareas||'', estado: contado?(c.registrantes.length>1? `Contado (${c.registrantes.join(' + ')})` : 'Contado') : 'Sin contar',
+        kgHa: kgHa!=null? kgHa.toFixed(0) : '', kgTotal: kgTotalCuartel!=null? kgTotalCuartel.toFixed(0) : '', fuente
+      });
     }
-    filasDetalle.push({
-      zona: cu.zona||'', productor: cu.productor||'', cuartel: cu.nombre, variedad: cu.variedad,
-      hectareas: cu.hectareas||'', estado: contado?(c.registrantes.length>1? `Contado (${c.registrantes.join(' + ')})` : 'Contado') : 'Sin contar',
-      kgHa: kgHa!=null? kgHa.toFixed(0) : '', kgTotal: kgTotalCuartel!=null? kgTotalCuartel.toFixed(0) : '', fuente
-    });
-  }
 
-  const totalCuarteles = cuartelesActivos.length;
-  const contadosCount = Object.keys(porCuartel).filter(id=>cuartelesActivos.some(c=>c.id===id)).length;
-  const pct = totalCuarteles ? Math.round((contadosCount/totalCuarteles)*100) : 0;
-  const kgHaPromedio = haConEstimado ? (kgHaSumaPonderada/haConEstimado) : null;
+    const totalCuarteles = cuartelesFiltrados.length;
+    const contadosCount = cuartelesFiltrados.filter(cu=>!!porCuartel[cu.id]).length;
+    const pct = totalCuarteles ? Math.round((contadosCount/totalCuarteles)*100) : 0;
+    const kgHaPromedio = haConEstimado ? (kgHaSumaPonderada/haConEstimado) : null;
 
-  $('panelProduccionResumen').innerHTML = `
-    <div class="box"><div class="v">${kgTotalTemporada? Math.round(kgTotalTemporada).toLocaleString('es-CL') : 's/d'}</div><div class="l">kg totales estimados</div></div>
-    <div class="box"><div class="v">${kgHaPromedio!=null? Math.round(kgHaPromedio).toLocaleString('es-CL') : 's/d'}</div><div class="l">kg/ha promedio</div></div>
-    <div class="box"><div class="v">${contadosCount} de ${totalCuarteles}</div><div class="l">cuarteles contados</div></div>
-  `;
-  $('panelProduccionFill').style.width = pct+'%';
-  $('panelProduccionAvanceTxt').textContent = `${pct}% de avance de conteo (${contadosCount} de ${totalCuarteles} cuarteles activos ya tienen al menos un conteo esta temporada).`;
+    if(totalCuarteles===0){
+      $('panelProduccionResumen').innerHTML = '<div class="empty">Ningún cuartel activo coincide con este filtro.</div>';
+      $('panelProduccionFill').style.width = '0%';
+      $('panelProduccionAvanceTxt').textContent = '';
+      $('panelProduccionDetalle').innerHTML = '';
+      window.__prodExportRows = [];
+      return;
+    }
 
-  $('panelProduccionDetalle').innerHTML = `
-    <h2 style="font-size:14px;">Detalle por cuartel</h2>
-    <table><thead><tr><th>Zona</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Ha</th><th>Estado</th><th>Kg/ha est.</th><th>Kg total est.</th></tr></thead><tbody>
-    ${filasDetalle.map(f=>`<tr>
-      <td class="txt">${f.zona||'—'}</td><td class="txt">${f.productor||'—'}</td><td class="txt">${f.cuartel}</td><td class="txt">${f.variedad}</td>
-      <td>${f.hectareas}</td><td class="txt">${f.estado}</td><td>${f.kgHa||'s/d'}</td><td>${f.kgTotal||'s/d'}</td>
-    </tr>`).join('')}
-    </tbody></table>
-  `;
+    $('panelProduccionResumen').innerHTML = `
+      <div class="box"><div class="v">${kgTotalTemporada? Math.round(kgTotalTemporada).toLocaleString('es-CL') : 's/d'}</div><div class="l">kg totales estimados</div></div>
+      <div class="box"><div class="v">${kgHaPromedio!=null? Math.round(kgHaPromedio).toLocaleString('es-CL') : 's/d'}</div><div class="l">kg/ha promedio</div></div>
+      <div class="box"><div class="v">${contadosCount} de ${totalCuarteles}</div><div class="l">cuarteles contados</div></div>
+    `;
+    $('panelProduccionFill').style.width = pct+'%';
+    $('panelProduccionAvanceTxt').textContent = `${pct}% de avance de conteo (${contadosCount} de ${totalCuarteles} cuarteles activos ya tienen al menos un conteo esta temporada, según el filtro elegido).`;
 
-  window.__prodExportRows = filasDetalle;
-  window.__prodResumenExport = { temporada: tempReciente, kgTotalTemporada, kgHaPromedio, contadosCount, totalCuarteles, pct };
+    $('panelProduccionDetalle').innerHTML = `
+      <h2 style="font-size:14px;">Detalle por cuartel</h2>
+      <table><thead><tr><th>Zona</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Ha</th><th>Estado</th><th>Kg/ha est.</th><th>Kg total est.</th></tr></thead><tbody>
+      ${filasDetalle.map(f=>`<tr>
+        <td class="txt">${f.zona||'—'}</td><td class="txt">${f.productor||'—'}</td><td class="txt">${f.cuartel}</td><td class="txt">${f.variedad}</td>
+        <td>${f.hectareas}</td><td class="txt">${f.estado}</td><td>${f.kgHa||'s/d'}</td><td>${f.kgTotal||'s/d'}</td>
+      </tr>`).join('')}
+      </tbody></table>
+    `;
+
+    window.__prodExportRows = filasDetalle;
+    window.__prodResumenExport = { temporada: tempReciente, kgTotalTemporada, kgHaPromedio, contadosCount, totalCuarteles, pct };
+  };
+
+  fZona.onchange = draw;
+  fProd.onchange = draw;
+  fVar.onchange = draw;
+  await draw();
 }
 
 $('btnExportarProduccion')?.addEventListener('click', ()=>{
