@@ -169,6 +169,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
 .entrada-item .tag-tipo{font-weight:700;font-size:11.5px;padding:2px 9px;border-radius:20px;color:#fff;margin-right:8px;}
 .entrada-item .tag-dardos{background:#9C1866;}
 .entrada-item .tag-ramillas{background:#E0479A;}
+.entrada-item .tag-frutos{background:#C2185B;}
 .entrada-item .acciones button{margin-left:8px;}
 
 /* carrusel de curiosidades */
@@ -350,6 +351,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
   <button data-view="v-conteo">Conteo en terreno</button>
   <button data-view="v-historial">Historial</button>
   <button data-view="v-estimador">Estimador de carga</button>
+  <button data-view="v-comparativo">Dardos vs. Frutos</button>
   <button data-view="v-referencia">Ficha varietal</button>
 </nav>
 
@@ -578,10 +580,18 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
         <div id="sugerenciaMuestreo2" class="suggest-box"></div>
 
         <div class="grid" style="margin-top:16px;">
+          <div class="field">
+            <label>Tipo de conteo</label>
+            <select id="lc-tipo">
+              <option value="dardos">🌸 Conteo de dardos</option>
+              <option value="frutos">🍒 Conteo de frutos</option>
+            </select>
+          </div>
           <div class="field"><label>Fecha del conteo</label><input type="date" id="lc-fecha"></div>
           <div class="field"><label>Temporada</label><input type="text" id="lc-temporada" placeholder="2026-2027"></div>
           <div class="field"><label>Responsable</label><input type="text" id="lc-responsable" placeholder="Nombre del muestreador"></div>
         </div>
+        <p class="sub" id="lc-tipo-ayuda">El conteo de dardos se usa apenas terminada la poda para proyectar la carga de la temporada que viene. El conteo de frutos se hace después de la cuaja, contando fruta real ya cuajada en la misma planta, y sirve para contrastar esa proyección.</p>
 
         <div class="actions">
           <button class="btn btn-primary" id="btnPaso1Continuar">Continuar →</button>
@@ -620,15 +630,24 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
         <h2 style="margin-bottom:2px;" id="plantaActualTxt"></h2>
         <div id="editandoPlantaAviso" class="note-box" style="display:none;"></div>
 
-        <div class="counter-line" style="--counter-color:#9C1866;">
-          <div class="counter-line-label">Dardos</div>
-          <input type="number" id="in-dardos" class="counter-line-input" placeholder="0" inputmode="numeric" min="0">
-          <button class="counter-line-plus" id="btnSumarDardo">+</button>
+        <div id="bloqueContadorDardos">
+          <div class="counter-line" style="--counter-color:#9C1866;">
+            <div class="counter-line-label">Dardos</div>
+            <input type="number" id="in-dardos" class="counter-line-input" placeholder="0" inputmode="numeric" min="0">
+            <button class="counter-line-plus" id="btnSumarDardo">+</button>
+          </div>
+          <div class="counter-line" style="--counter-color:#E0479A;">
+            <div class="counter-line-label">Ramillas</div>
+            <input type="number" id="in-ramillas" class="counter-line-input" placeholder="0" inputmode="numeric" min="0">
+            <button class="counter-line-plus" id="btnSumarRamilla">+</button>
+          </div>
         </div>
-        <div class="counter-line" style="--counter-color:#E0479A;">
-          <div class="counter-line-label">Ramillas</div>
-          <input type="number" id="in-ramillas" class="counter-line-input" placeholder="0" inputmode="numeric" min="0">
-          <button class="counter-line-plus" id="btnSumarRamilla">+</button>
+        <div id="bloqueContadorFrutos" style="display:none;">
+          <div class="counter-line" style="--counter-color:#C2185B;">
+            <div class="counter-line-label">Frutos</div>
+            <input type="number" id="in-frutos" class="counter-line-input" placeholder="0" inputmode="numeric" min="0">
+            <button class="counter-line-plus" id="btnSumarFruto">+</button>
+          </div>
         </div>
 
         <div class="summary-strip" id="resumenEntradasActuales" style="margin-top:16px;"></div>
@@ -680,6 +699,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
       <h2>Historial de labores de conteo</h2>
       <p class="sub">Todas las labores registradas, agrupadas por cuartel y temporada.</p>
       <div class="filter-row">
+        <select id="histFiltroTipo"><option value="">Dardos y frutos</option><option value="dardos">🌸 Solo dardos</option><option value="frutos">🍒 Solo frutos</option></select>
         <select id="histFiltroVar"><option value="">Todas las variedades</option></select>
         <select id="histFiltroTemp"><option value="">Todas las temporadas</option></select>
         <div class="field" style="margin-bottom:0;"><label>Desde</label><input type="date" id="histFiltroDesde"></div>
@@ -696,6 +716,7 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
       <h2>Estimaciones según tus conteos registrados</h2>
       <p class="sub">Se calculan solas a partir de lo que ya cargaste en "Registrar conteo" — no necesitas volver a escribir nada. Usan el coeficiente <b>calibrado</b> con tu propia cosecha cuando existe; si no, el <b>referencial</b> de la ficha varietal. Si para un cuartel ya tienes un análisis de yema real, actívalo en la columna "Análisis yema" de esa fila.</p>
       <div class="filter-row">
+        <select id="estFiltroTipo"><option value="">Dardos y frutos</option><option value="dardos">🌸 Solo dardos</option><option value="frutos">🍒 Solo frutos</option></select>
         <select id="estFiltroProductor"><option value="">Todos los productores</option></select>
         <select id="estFiltroVar"><option value="">Todas las variedades</option></select>
         <select id="estFiltroTemp"><option value="">Todas las temporadas</option></select>
@@ -703,6 +724,22 @@ footer.foot{text-align:center;color:var(--muted);font-size:12px;padding:30px 0 1
         <button class="btn btn-secondary" id="btnExportarEstimador" style="align-self:flex-end;">📥 Exportar a Excel</button>
       </div>
       <div id="estimacionesHistWrap"></div>
+    </div>
+  </section>
+
+  <!-- COMPARATIVO DARDOS VS FRUTOS -->
+  <section id="v-comparativo" class="view">
+    <div class="card">
+      <h2>🌸🍒 Comparativo: Dardos vs. Frutos</h2>
+      <p class="sub">Cruza, por cuartel, el kg estimado según el conteo de dardos (proyección post-poda) contra el kg estimado según el conteo de frutos real (post-cuaja). Un % de semejanza bajo no siempre significa que el modelo esté mal calibrado — puede reflejar algo real que pasó en terreno (helada, mala cuaja, etc.), así que agrega una observación cuando corresponda para que quien vea el dato después tenga el contexto.</p>
+      <div class="filter-row">
+        <select id="cmpFiltroZona"><option value="">Todas las zonas</option></select>
+        <select id="cmpFiltroProd"><option value="">Todos los productores</option></select>
+        <select id="cmpFiltroVar"><option value="">Todas las variedades</option></select>
+        <select id="cmpFiltroTemp"><option value="">Todas las temporadas</option></select>
+      </div>
+      <div class="summary-strip" id="cmpResumen" style="margin-bottom:14px;"></div>
+      <div id="cmpTableWrap"></div>
     </div>
   </section>
 
@@ -1063,6 +1100,7 @@ function irATab(view){
   if(view==='v-cuarteles') { limpiarFormCuartel(); poblarPickerCuarteles(); renderListaCuarteles(); }
   if(view==='v-conteo') abrirTabConteo();
   if(view==='v-estimador') renderEstimacionesHistorial();
+  if(view==='v-comparativo') renderComparativo();
 }
 
 async function poblarPickerCuarteles(){
@@ -1284,6 +1322,9 @@ function limpiarFormPaso1(){
   $('cc-variedad').selectedIndex=0;
   $('pickCuartelConteo').value='';
   $('sugerenciaMuestreo2').innerHTML='';
+  tipoConteoActual = 'dardos';
+  $('lc-tipo').value = 'dardos';
+  $('lc-tipo').disabled = false;
 }
 
 function actualizarSugerencia2(){
@@ -1301,6 +1342,7 @@ async function persistirBorrador(){
   const borrador = {
     id: editandoConteoId || borradorId,
     cuartelId: cuartelActualId,
+    tipo: tipoConteoActual,
     fecha: $('lc-fecha').value,
     temporada: $('lc-temporada').value.trim(),
     responsable: $('lc-responsable').value.trim(),
@@ -1334,28 +1376,50 @@ function persistirBorradorDebounced(){
 ['m-hilera','m-planta'].forEach(id=> $(id)?.addEventListener('input', persistirBorradorDebounced));
 
 function renderTablaMuestras(){
-  if(muestrasTemp.length===0){
-    $('tablaMuestras').innerHTML = '<div class="empty">Aún no agregas plantas a esta labor.</div>';
+  if(tipoConteoActual==='frutos'){
+    if(muestrasTemp.length===0){
+      $('tablaMuestras').innerHTML = '<div class="empty">Aún no agregas plantas a esta labor.</div>';
+    } else {
+      let html = '<table><thead><tr><th>#</th><th>Hilera</th><th>Planta</th><th>Frutos</th><th></th></tr></thead><tbody>';
+      muestrasTemp.forEach((m,i)=>{
+        html += `<tr><td>${i+1}</td><td>${m.hilera}</td><td>${m.planta}</td><td>${m.frutos}</td><td><button class="icon-edit" onclick="revisarMuestra(${i})">editar</button><button class="icon-del" onclick="borrarMuestraTemp(${i})">quitar</button></td></tr>`;
+      });
+      html += '</tbody></table>';
+      $('tablaMuestras').innerHTML = html;
+    }
+    const n = muestrasTemp.length;
+    const frutosTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.frutos)||0),0);
+    const frutosProm = n? (frutosTot/n).toFixed(1) : '0';
+    $('resumenMuestras').innerHTML = `
+      <div class="box"><div class="v">${n}</div><div class="l">plantas contadas</div></div>
+      <div class="box"><div class="v">${frutosTot}</div><div class="l">frutos totales</div></div>
+      <div class="box"><div class="v">${frutosProm}</div><div class="l">frutos / planta</div></div>
+    `;
   } else {
-    let html = '<table><thead><tr><th>#</th><th>Hilera</th><th>Planta</th><th>Dardos</th><th>Ramillas</th><th></th></tr></thead><tbody>';
-    muestrasTemp.forEach((m,i)=>{
-      html += `<tr><td>${i+1}</td><td>${m.hilera}</td><td>${m.planta}</td><td>${m.dardos}</td><td>${m.ramillas}</td><td><button class="icon-edit" onclick="revisarMuestra(${i})">editar</button><button class="icon-del" onclick="borrarMuestraTemp(${i})">quitar</button></td></tr>`;
-    });
-    html += '</tbody></table>';
-    $('tablaMuestras').innerHTML = html;
+    if(muestrasTemp.length===0){
+      $('tablaMuestras').innerHTML = '<div class="empty">Aún no agregas plantas a esta labor.</div>';
+    } else {
+      let html = '<table><thead><tr><th>#</th><th>Hilera</th><th>Planta</th><th>Dardos</th><th>Ramillas</th><th></th></tr></thead><tbody>';
+      muestrasTemp.forEach((m,i)=>{
+        html += `<tr><td>${i+1}</td><td>${m.hilera}</td><td>${m.planta}</td><td>${m.dardos}</td><td>${m.ramillas}</td><td><button class="icon-edit" onclick="revisarMuestra(${i})">editar</button><button class="icon-del" onclick="borrarMuestraTemp(${i})">quitar</button></td></tr>`;
+      });
+      html += '</tbody></table>';
+      $('tablaMuestras').innerHTML = html;
+    }
+    const n = muestrasTemp.length;
+    const dardosTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.dardos)||0),0);
+    const ramillasTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0);
+    const dardosProm = n? (dardosTot/n).toFixed(1) : '0';
+    const ramillasProm = n? (ramillasTot/n).toFixed(1) : '0';
+    $('resumenMuestras').innerHTML = `
+      <div class="box"><div class="v">${n}</div><div class="l">plantas contadas</div></div>
+      <div class="box"><div class="v">${dardosTot}</div><div class="l">dardos totales</div></div>
+      <div class="box"><div class="v">${ramillasTot}</div><div class="l">ramillas totales</div></div>
+      <div class="box"><div class="v">${dardosProm}</div><div class="l">dardos / planta</div></div>
+      <div class="box"><div class="v">${ramillasProm}</div><div class="l">ramillas / planta</div></div>
+    `;
   }
   const n = muestrasTemp.length;
-  const dardosTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.dardos)||0),0);
-  const ramillasTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0);
-  const dardosProm = n? (dardosTot/n).toFixed(1) : '0';
-  const ramillasProm = n? (ramillasTot/n).toFixed(1) : '0';
-  $('resumenMuestras').innerHTML = `
-    <div class="box"><div class="v">${n}</div><div class="l">plantas contadas</div></div>
-    <div class="box"><div class="v">${dardosTot}</div><div class="l">dardos totales</div></div>
-    <div class="box"><div class="v">${ramillasTot}</div><div class="l">ramillas totales</div></div>
-    <div class="box"><div class="v">${dardosProm}</div><div class="l">dardos / planta</div></div>
-    <div class="box"><div class="v">${ramillasProm}</div><div class="l">ramillas / planta</div></div>
-  `;
   getCuartel(cuartelActualId).then(c=>{
     if(!c) return;
     const dens = densidadDe(c);
@@ -1377,23 +1441,36 @@ async function actualizarContextoPlanta(hilera, planta){
   $('plantaActualTxt').innerHTML = `${campo? campo+zonaTxt+' · ':''}Hilera <b>${hilera}</b> · Planta <b>${planta}</b>`;
 }
 
-let entradasActuales = []; // {id, tipo:'dardos'|'ramillas', valor}
+let entradasActuales = []; // {id, tipo:'dardos'|'ramillas'|'frutos', valor}
+let tipoConteoActual = 'dardos'; // 'dardos' o 'frutos' — se fija en el Paso 1 de la labor
+
+function etiquetaTipoEntrada(tipo){
+  return tipo==='dardos' ? 'Dardos' : (tipo==='ramillas' ? 'Ramillas' : 'Frutos');
+}
 
 function renderEntradas(){
-  const dTot = entradasActuales.filter(e=>e.tipo==='dardos').reduce((s,e)=>s+e.valor,0);
-  const rTot = entradasActuales.filter(e=>e.tipo==='ramillas').reduce((s,e)=>s+e.valor,0);
-  $('resumenEntradasActuales').innerHTML = `
-    <div class="box"><div class="v">${dTot}</div><div class="l">dardos (planta)</div></div>
-    <div class="box"><div class="v">${rTot}</div><div class="l">ramillas (planta)</div></div>
-    <div class="box"><div class="v">${entradasActuales.length}</div><div class="l">registros</div></div>
-  `;
+  if(tipoConteoActual==='frutos'){
+    const fTot = entradasActuales.filter(e=>e.tipo==='frutos').reduce((s,e)=>s+e.valor,0);
+    $('resumenEntradasActuales').innerHTML = `
+      <div class="box"><div class="v">${fTot}</div><div class="l">frutos (planta)</div></div>
+      <div class="box"><div class="v">${entradasActuales.length}</div><div class="l">registros</div></div>
+    `;
+  } else {
+    const dTot = entradasActuales.filter(e=>e.tipo==='dardos').reduce((s,e)=>s+e.valor,0);
+    const rTot = entradasActuales.filter(e=>e.tipo==='ramillas').reduce((s,e)=>s+e.valor,0);
+    $('resumenEntradasActuales').innerHTML = `
+      <div class="box"><div class="v">${dTot}</div><div class="l">dardos (planta)</div></div>
+      <div class="box"><div class="v">${rTot}</div><div class="l">ramillas (planta)</div></div>
+      <div class="box"><div class="v">${entradasActuales.length}</div><div class="l">registros</div></div>
+    `;
+  }
   const ultimas = [...entradasActuales].slice(-5).reverse();
   if(ultimas.length===0){
     $('ultimasEntradas').innerHTML = '<div class="empty" style="padding:12px;">Aún no agregas ningún dato.</div>';
   } else {
     $('ultimasEntradas').innerHTML = ultimas.map(e=>`
       <div class="entrada-item">
-        <div><span class="tag-tipo tag-${e.tipo}">${e.tipo==='dardos'?'Dardos':'Ramillas'}</span>${e.valor}</div>
+        <div><span class="tag-tipo tag-${e.tipo}">${etiquetaTipoEntrada(e.tipo)}</span>${e.valor}</div>
         <div class="acciones"><button class="icon-edit" onclick="editarEntrada('${e.id}')">editar</button><button class="icon-del" onclick="quitarEntrada('${e.id}')">quitar</button></div>
       </div>`).join('');
   }
@@ -1408,7 +1485,7 @@ window.editarEntrada = (id)=>{
   const e = entradasActuales.find(x=>x.id===id);
   if(!e) return;
   entradasActuales = entradasActuales.filter(x=>x.id!==id);
-  const inputId = e.tipo==='dardos' ? 'in-dardos' : 'in-ramillas';
+  const inputId = e.tipo==='dardos' ? 'in-dardos' : (e.tipo==='ramillas' ? 'in-ramillas' : 'in-frutos');
   $(inputId).value = e.valor;
   $(inputId).focus();
   renderEntradas();
@@ -1416,7 +1493,7 @@ window.editarEntrada = (id)=>{
 };
 
 function agregarEntrada(tipo){
-  const inputId = tipo==='dardos' ? 'in-dardos' : 'in-ramillas';
+  const inputId = tipo==='dardos' ? 'in-dardos' : (tipo==='ramillas' ? 'in-ramillas' : 'in-frutos');
   const val = parseInt($(inputId).value);
   if(isNaN(val) || val<0){ alert('Escribe un número válido antes de sumar.'); return; }
   entradasActuales.push({id:'e'+Date.now()+Math.random().toString(36).slice(2,6), tipo, valor: val});
@@ -1427,29 +1504,39 @@ function agregarEntrada(tipo){
 }
 $('btnSumarDardo')?.addEventListener('click', ()=>agregarEntrada('dardos'));
 $('btnSumarRamilla')?.addEventListener('click', ()=>agregarEntrada('ramillas'));
+$('btnSumarFruto')?.addEventListener('click', ()=>agregarEntrada('frutos'));
 $('in-dardos')?.addEventListener('keydown', e=>{ if(e.key==='Enter') agregarEntrada('dardos'); });
 $('in-ramillas')?.addEventListener('keydown', e=>{ if(e.key==='Enter') agregarEntrada('ramillas'); });
+$('in-frutos')?.addEventListener('keydown', e=>{ if(e.key==='Enter') agregarEntrada('frutos'); });
 
 function mostrarRevision(){
   const hilera = $('m-hilera').value, planta = $('m-planta').value;
-  const dTot = entradasActuales.filter(e=>e.tipo==='dardos').reduce((s,e)=>s+e.valor,0);
-  const rTot = entradasActuales.filter(e=>e.tipo==='ramillas').reduce((s,e)=>s+e.valor,0);
   getCuartel(cuartelActualId).then(cu=>{
     const campo = cu? (cu.productor||cu.nombre) : '';
     const zonaTxt = cu && cu.zona ? ` (${cu.zona})` : '';
     $('revisionPlantaTxt').innerHTML = `${campo? campo+zonaTxt+' · ':''}Hilera <b>${hilera}</b> · Planta <b>${planta}</b>`;
   });
-  $('resumenRevision').innerHTML = `
-    <div class="box"><div class="v">${dTot}</div><div class="l">dardos totales</div></div>
-    <div class="box"><div class="v">${rTot}</div><div class="l">ramillas totales</div></div>
-    <div class="box"><div class="v">${entradasActuales.length}</div><div class="l">registros ingresados</div></div>
-  `;
+  if(tipoConteoActual==='frutos'){
+    const fTot = entradasActuales.filter(e=>e.tipo==='frutos').reduce((s,e)=>s+e.valor,0);
+    $('resumenRevision').innerHTML = `
+      <div class="box"><div class="v">${fTot}</div><div class="l">frutos totales</div></div>
+      <div class="box"><div class="v">${entradasActuales.length}</div><div class="l">registros ingresados</div></div>
+    `;
+  } else {
+    const dTot = entradasActuales.filter(e=>e.tipo==='dardos').reduce((s,e)=>s+e.valor,0);
+    const rTot = entradasActuales.filter(e=>e.tipo==='ramillas').reduce((s,e)=>s+e.valor,0);
+    $('resumenRevision').innerHTML = `
+      <div class="box"><div class="v">${dTot}</div><div class="l">dardos totales</div></div>
+      <div class="box"><div class="v">${rTot}</div><div class="l">ramillas totales</div></div>
+      <div class="box"><div class="v">${entradasActuales.length}</div><div class="l">registros ingresados</div></div>
+    `;
+  }
   if(entradasActuales.length===0){
     $('tablaRevision').innerHTML = '<div class="empty">No hay datos ingresados.</div>';
   } else {
     let html = '<table><thead><tr><th>#</th><th>Tipo</th><th>Valor</th></tr></thead><tbody>';
     entradasActuales.forEach((e,i)=>{
-      html += `<tr><td>${i+1}</td><td class="txt">${e.tipo==='dardos'?'Dardos':'Ramillas'}</td><td>${e.valor}</td></tr>`;
+      html += `<tr><td>${i+1}</td><td class="txt">${etiquetaTipoEntrada(e.tipo)}</td><td>${e.valor}</td></tr>`;
     });
     html += '</tbody></table>';
     $('tablaRevision').innerHTML = html;
@@ -1488,29 +1575,36 @@ async function calcularPromedioVariedad(variedad){
 
 $('btnConfirmarConteo')?.addEventListener('click', async ()=>{
   const hilera = $('m-hilera').value, planta = $('m-planta').value;
-  const dTot = entradasActuales.filter(e=>e.tipo==='dardos').reduce((s,e)=>s+e.valor,0);
-  const rTot = entradasActuales.filter(e=>e.tipo==='ramillas').reduce((s,e)=>s+e.valor,0);
+  let muestra;
 
-  const cuActual = await getCuartel(cuartelActualId);
-  if(cuActual){
-    if(promedioVariedadSesion === undefined){
-      promedioVariedadSesion = await calcularPromedioVariedad(cuActual.variedad);
-    }
-    const prom = promedioVariedadSesion;
-    if(prom){
-      const dFuera = prom.dardos>0 && (dTot > prom.dardos*1.8 || dTot < prom.dardos*0.5);
-      const rFuera = prom.ramillas>0 && (rTot > prom.ramillas*1.8 || rTot < prom.ramillas*0.5);
-      if(dFuera || rFuera){
-        const msg = `⚠️ Este valor se ve muy distinto al promedio de tus conteos anteriores para ${cuActual.variedad} (basado en ${prom.n} plantas):\n`
-          + `Dardos: ingresaste ${dTot}, promedio ${prom.dardos.toFixed(1)}\n`
-          + `Ramillas: ingresaste ${rTot}, promedio ${prom.ramillas.toFixed(1)}\n\n`
-          + `¿Seguro que quieres guardarlo así? (Cancelar para revisar el conteo de esta planta)`;
-        if(!confirm(msg)) return;
+  if(tipoConteoActual==='frutos'){
+    const fTot = entradasActuales.filter(e=>e.tipo==='frutos').reduce((s,e)=>s+e.valor,0);
+    muestra = {hilera, planta, frutos: fTot, entradas: [...entradasActuales]};
+  } else {
+    const dTot = entradasActuales.filter(e=>e.tipo==='dardos').reduce((s,e)=>s+e.valor,0);
+    const rTot = entradasActuales.filter(e=>e.tipo==='ramillas').reduce((s,e)=>s+e.valor,0);
+
+    const cuActual = await getCuartel(cuartelActualId);
+    if(cuActual){
+      if(promedioVariedadSesion === undefined){
+        promedioVariedadSesion = await calcularPromedioVariedad(cuActual.variedad);
+      }
+      const prom = promedioVariedadSesion;
+      if(prom){
+        const dFuera = prom.dardos>0 && (dTot > prom.dardos*1.8 || dTot < prom.dardos*0.5);
+        const rFuera = prom.ramillas>0 && (rTot > prom.ramillas*1.8 || rTot < prom.ramillas*0.5);
+        if(dFuera || rFuera){
+          const msg = `⚠️ Este valor se ve muy distinto al promedio de tus conteos anteriores para ${cuActual.variedad} (basado en ${prom.n} plantas):\n`
+            + `Dardos: ingresaste ${dTot}, promedio ${prom.dardos.toFixed(1)}\n`
+            + `Ramillas: ingresaste ${rTot}, promedio ${prom.ramillas.toFixed(1)}\n\n`
+            + `¿Seguro que quieres guardarlo así? (Cancelar para revisar el conteo de esta planta)`;
+          if(!confirm(msg)) return;
+        }
       }
     }
+    muestra = {hilera, planta, dardos: dTot, ramillas: rTot, entradas: [...entradasActuales]};
   }
 
-  const muestra = {hilera, planta, dardos: dTot, ramillas: rTot, entradas: [...entradasActuales]};
   if(editandoMuestraIndex!==null){ muestrasTemp[editandoMuestraIndex] = muestra; editandoMuestraIndex = null; }
   else { muestrasTemp.push(muestra); }
   entradasActuales = [];
@@ -1527,13 +1621,19 @@ window.revisarMuestra = (i)=>{
   const m = muestrasTemp[i];
   editandoMuestraIndex = i;
   $('m-hilera').value = m.hilera; $('m-planta').value = m.planta;
-  entradasActuales = m.entradas ? JSON.parse(JSON.stringify(m.entradas)) : [
-    ...(parseFloat(m.dardos)>0? [{id:'e'+Date.now()+'a', tipo:'dardos', valor: parseFloat(m.dardos)}]:[]),
-    ...(parseFloat(m.ramillas)>0? [{id:'e'+Date.now()+'b', tipo:'ramillas', valor: parseFloat(m.ramillas)}]:[])
-  ];
+  entradasActuales = m.entradas ? JSON.parse(JSON.stringify(m.entradas)) : (
+    tipoConteoActual==='frutos'
+      ? [...(parseFloat(m.frutos)>0? [{id:'e'+Date.now()+'c', tipo:'frutos', valor: parseFloat(m.frutos)}]:[])]
+      : [
+          ...(parseFloat(m.dardos)>0? [{id:'e'+Date.now()+'a', tipo:'dardos', valor: parseFloat(m.dardos)}]:[]),
+          ...(parseFloat(m.ramillas)>0? [{id:'e'+Date.now()+'b', tipo:'ramillas', valor: parseFloat(m.ramillas)}]:[])
+        ]
+  );
   $('editandoPlantaAviso').style.display='block';
   $('editandoPlantaAviso').innerHTML = `Estás editando la planta hilera ${m.hilera} / planta ${m.planta}.`;
   actualizarContextoPlanta(m.hilera, m.planta);
+  $('bloqueContadorDardos').style.display = tipoConteoActual==='frutos' ? 'none' : '';
+  $('bloqueContadorFrutos').style.display = tipoConteoActual==='frutos' ? '' : 'none';
   renderEntradas();
   $('cstep-revision').classList.remove('active');
   irACStep(3);
@@ -1551,6 +1651,7 @@ $('btnPaso1Continuar')?.addEventListener('click', async ()=>{
   const nombre = $('cc-nombre').value.trim();
   if(!nombre){ alert('Ingresa el nombre del cuartel.'); return; }
   if(!$('lc-fecha').value || !$('lc-temporada').value.trim()){ alert('Ingresa fecha y temporada de la labor.'); return; }
+  tipoConteoActual = $('lc-tipo').value || 'dardos';
   const idCu = cuartelActualId || ('c'+Date.now()+Math.random().toString(36).slice(2,7));
   const existenteCu = cuartelActualId ? await getCuartel(cuartelActualId) : null;
   const cu = {
@@ -1593,9 +1694,11 @@ $('btnPaso2Continuar')?.addEventListener('click', ()=>{
   entradasActuales = [];
   $('editandoPlantaAviso').style.display='none';
   actualizarContextoPlanta(hilera, planta);
+  $('bloqueContadorDardos').style.display = tipoConteoActual==='frutos' ? 'none' : '';
+  $('bloqueContadorFrutos').style.display = tipoConteoActual==='frutos' ? '' : 'none';
   renderEntradas();
   irACStep(3);
-  setTimeout(()=>$('in-dardos').focus(), 50);
+  setTimeout(()=>$(tipoConteoActual==='frutos' ? 'in-frutos' : 'in-dardos').focus(), 50);
 });
 
 $('btnVolverPaso2')?.addEventListener('click', ()=> irACStep(2));
@@ -1603,10 +1706,15 @@ $('btnVolverPaso2b')?.addEventListener('click', ()=> irACStep(2));
 
 $('btnIrFinalizar')?.addEventListener('click', ()=>{
   const n = muestrasTemp.length;
-  const dardosTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.dardos)||0),0);
-  const ramillasTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0);
   getCuartel(cuartelActualId).then(cu=>{
-    $('recapFinalTxt').innerHTML = `<b>${cu? cu.nombre:''}</b> · ${cu? cu.variedad:''} · ${n} plantas contadas · ${dardosTot} dardos totales · ${ramillasTot} ramillas totales.`;
+    if(tipoConteoActual==='frutos'){
+      const frutosTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.frutos)||0),0);
+      $('recapFinalTxt').innerHTML = `<b>${cu? cu.nombre:''}</b> · ${cu? cu.variedad:''} · Conteo de frutos · ${n} plantas contadas · ${frutosTot} frutos totales.`;
+    } else {
+      const dardosTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.dardos)||0),0);
+      const ramillasTot = muestrasTemp.reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0);
+      $('recapFinalTxt').innerHTML = `<b>${cu? cu.nombre:''}</b> · ${cu? cu.variedad:''} · Conteo de dardos · ${n} plantas contadas · ${dardosTot} dardos totales · ${ramillasTot} ramillas totales.`;
+    }
   });
   irACStep(4);
 });
@@ -1626,6 +1734,11 @@ async function abrirTabConteo(){
     entradasActuales = b.entradasActuales || [];
     editandoConteoId = b.esEdicion ? b.id : null;
     borradorId = b.esEdicion ? null : b.id;
+    tipoConteoActual = b.tipo || 'dardos';
+    $('lc-tipo').value = tipoConteoActual;
+    $('lc-tipo').disabled = !!editandoConteoId;
+    $('bloqueContadorDardos').style.display = tipoConteoActual==='frutos' ? 'none' : '';
+    $('bloqueContadorFrutos').style.display = tipoConteoActual==='frutos' ? '' : 'none';
     $('lc-fecha').value = b.fecha||''; $('lc-temporada').value = b.temporada||''; $('lc-responsable').value = b.responsable||'';
     $('k-kgreal').value = b.kgreal||'';
     $('m-hilera').value = b.mHilera||''; $('m-planta').value = b.mPlanta||'';
@@ -1667,6 +1780,7 @@ $('btnGuardarConteo')?.addEventListener('click', async ()=>{
   const conteo = {
     id: idFinal,
     cuartelId: cuartelActualId,
+    tipo: tipoConteoActual,
     fecha: $('lc-fecha').value,
     temporada: $('lc-temporada').value.trim(),
     responsable: $('lc-responsable').value.trim(),
@@ -1709,6 +1823,11 @@ async function editarConteo(id){
   entradasActuales = [];
   editandoMuestraIndex = null;
   editandoConteoId = c.id; borradorId = null;
+  tipoConteoActual = c.tipo || 'dardos';
+  $('lc-tipo').value = tipoConteoActual;
+  $('lc-tipo').disabled = true; // no se cambia el tipo de una labor ya guardada, para no mezclar dardos y frutos en el mismo registro
+  $('bloqueContadorDardos').style.display = tipoConteoActual==='frutos' ? 'none' : '';
+  $('bloqueContadorFrutos').style.display = tipoConteoActual==='frutos' ? '' : 'none';
   $('lc-fecha').value = c.fecha||''; $('lc-temporada').value = c.temporada||''; $('lc-responsable').value = c.responsable||'';
   $('k-kgreal').value = c.kgreal||'';
   $('m-hilera').value=''; $('m-planta').value='';
@@ -1742,13 +1861,16 @@ async function renderHistorial(){
 
   const enriched = conteos.map(c=>{
     const cu = cMap[c.cuartelId] || {};
+    const tipo = c.tipo || 'dardos';
     const n = (c.muestras||[]).length;
     const dardosTot = (c.muestras||[]).reduce((s,m)=>s+(parseFloat(m.dardos)||0),0);
     const ramillasTot = (c.muestras||[]).reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0);
-    return {...c, cuartelNombre:cu.nombre||'—', variedad:cu.variedad||'—', zona:cu.zona||'—', productor:cu.productor||'—', n, dardosTot, ramillasTot};
+    const frutosTot = (c.muestras||[]).reduce((s,m)=>s+(parseFloat(m.frutos)||0),0);
+    return {...c, tipo, cuartelNombre:cu.nombre||'—', variedad:cu.variedad||'—', zona:cu.zona||'—', productor:cu.productor||'—', n, dardosTot, ramillasTot, frutosTot};
   });
 
   const fVar = $('histFiltroVar'), fTemp = $('histFiltroTemp'), fDesde = $('histFiltroDesde'), fHasta = $('histFiltroHasta');
+  const fTipo = $('histFiltroTipo');
   const vars = [...new Set(enriched.map(r=>r.variedad))];
   const temps = [...new Set(enriched.map(r=>r.temporada))];
   fVar.innerHTML = '<option value="">Todas las variedades</option>' + vars.map(v=>`<option>${v}</option>`).join('');
@@ -1756,26 +1878,30 @@ async function renderHistorial(){
 
   let filtActual = [];
   const draw = ()=>{
-    const selV = fVar.value, selT = fTemp.value, desde = fDesde.value, hasta = fHasta.value;
+    const selV = fVar.value, selT = fTemp.value, desde = fDesde.value, hasta = fHasta.value, selTipo = fTipo? fTipo.value : '';
     const filt = enriched.filter(r=>
       (!selV||r.variedad===selV) &&
       (!selT||r.temporada===selT) &&
+      (!selTipo||r.tipo===selTipo) &&
       (!desde || (r.fecha && r.fecha>=desde)) &&
       (!hasta || (r.fecha && r.fecha<=hasta))
     );
     filtActual = filt;
     if(filt.length===0){ $('histTableWrap').innerHTML = '<div class="empty">Aún no hay labores para este filtro. Ve a "Registrar conteo" para agregar la primera.</div>'; return; }
-    let html = '<table><thead><tr><th>Fecha</th><th>Temporada</th><th>Cuartel</th><th>Variedad</th><th>Registrado por</th><th>Plantas</th><th>Dardos tot.</th><th>Ramillas tot.</th><th>Kg real</th><th></th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Fecha</th><th>Temporada</th><th>Tipo</th><th>Cuartel</th><th>Variedad</th><th>Registrado por</th><th>Plantas</th><th>Dardos tot.</th><th>Ramillas tot.</th><th>Frutos tot.</th><th>Kg real</th><th></th></tr></thead><tbody>';
     filt.forEach(r=>{
+      const tipoTxt = r.tipo==='frutos' ? '🍒 Frutos' : '🌸 Dardos';
       html += `<tr>
         <td class="txt">${r.fecha||'—'}</td>
         <td class="txt">${r.temporada}</td>
+        <td class="txt">${tipoTxt}</td>
         <td class="txt">${r.cuartelNombre}</td>
         <td class="txt">${r.variedad}</td>
         <td class="txt">${r.usuario||r.responsable||'—'}</td>
         <td>${r.n}</td>
-        <td>${r.dardosTot}</td>
-        <td>${r.ramillasTot}</td>
+        <td>${r.tipo==='frutos' ? '—' : r.dardosTot}</td>
+        <td>${r.tipo==='frutos' ? '—' : r.ramillasTot}</td>
+        <td>${r.tipo==='frutos' ? r.frutosTot : '—'}</td>
         <td>${r.kgreal? r.kgreal+' kg':'—'}</td>
         <td><button class="icon-edit" onclick="editarConteo('${r.id}')">editar</button><button class="icon-del" onclick="borrarConteo('${r.id}')">borrar</button></td>
       </tr>`;
@@ -1784,6 +1910,7 @@ async function renderHistorial(){
     $('histTableWrap').innerHTML = html;
   };
   fVar.onchange = draw; fTemp.onchange = draw; fDesde.onchange = draw; fHasta.onchange = draw;
+  if(fTipo) fTipo.onchange = draw;
   $('btnExportarHistorial')?.addEventListener('click', ()=>{
     if(filtActual.length===0){ alert('No hay datos para exportar con este filtro.'); return; }
     exportarExcel('historial_cuaderno_dardos.xlsx', [{
@@ -1791,14 +1918,16 @@ async function renderHistorial(){
       columnas: [
         {header:'Fecha', key:'fecha'},
         {header:'Temporada', key:'temporada'},
+        {header:'Tipo', key: r=> r.tipo==='frutos' ? 'Frutos' : 'Dardos'},
         {header:'Zona', key:'zona'},
         {header:'Productor', key:'productor'},
         {header:'Cuartel', key:'cuartelNombre'},
         {header:'Variedad', key:'variedad'},
         {header:'Registrado por', key: r=>r.usuario||r.responsable||''},
         {header:'Plantas', key:'n'},
-        {header:'Dardos totales', key:'dardosTot'},
-        {header:'Ramillas totales', key:'ramillasTot'},
+        {header:'Dardos totales', key: r=> r.tipo==='frutos' ? '' : r.dardosTot},
+        {header:'Ramillas totales', key: r=> r.tipo==='frutos' ? '' : r.ramillasTot},
+        {header:'Frutos totales', key: r=> r.tipo==='frutos' ? r.frutosTot : ''},
         {header:'Kg real', key: r=>r.kgreal||''}
       ],
       filas: filtActual
@@ -1975,11 +2104,11 @@ async function renderPanelAdmin(conteos, cuarteles, cMap){
 
 async function renderPanelProduccion(conteos, cuarteles, cMap){
   const cuartelesActivos = cuarteles.filter(isActivo);
-  const temporadas = [...new Set(conteos.map(c=>c.temporada).filter(Boolean))].sort();
+  const temporadas = [...new Set(conteos.filter(c=>(c.tipo||'dardos')==='dardos').map(c=>c.temporada).filter(Boolean))].sort();
   const tempReciente = temporadas[temporadas.length-1];
   $('panelProduccionSub').textContent = tempReciente
-    ? `Estimado a partir de tus conteos registrados en la temporada ${tempReciente}. Solo visible para admin y admin secundario.`
-    : 'Aún no hay conteos registrados en ninguna temporada.';
+    ? `Estimado a partir de tus conteos de dardos en la temporada ${tempReciente} (no incluye conteos de frutos — esos se comparan en "Dardos vs. Frutos"). Solo visible para admin y admin secundario.`
+    : 'Aún no hay conteos de dardos registrados en ninguna temporada.';
 
   if(!tempReciente){
     $('panelProduccionResumen').innerHTML = '<div class="empty">Todavía no hay conteos para calcular un resumen.</div>';
@@ -1992,7 +2121,7 @@ async function renderPanelProduccion(conteos, cuarteles, cMap){
 
   // Para cada cuartel activo, combinamos todas las labores del mismo día (si 2+ personas contaron
   // el mismo cuartel el mismo día) y nos quedamos con el día más reciente de esta temporada.
-  const conteosTemp = conteos.filter(c=>c.temporada===tempReciente);
+  const conteosTemp = conteos.filter(c=>c.temporada===tempReciente && (c.tipo||'dardos')==='dardos');
   const gruposTemp = agruparConteosPorDia(conteosTemp);
   const porCuartel = {};
   gruposTemp.forEach(g=>{
@@ -2277,10 +2406,11 @@ function renderReferencia(){
 function agruparConteosPorDia(conteos){
   const grupos = {};
   conteos.forEach(c=>{
-    const key = `${c.cuartelId}|${c.fecha||''}|${c.temporada||''}`;
+    const tipo = c.tipo || 'dardos';
+    const key = `${c.cuartelId}|${c.fecha||''}|${c.temporada||''}|${tipo}`;
     if(!grupos[key]){
       grupos[key] = {
-        cuartelId: c.cuartelId, fecha: c.fecha||'', temporada: c.temporada||'',
+        cuartelId: c.cuartelId, fecha: c.fecha||'', temporada: c.temporada||'', tipo,
         muestras: [], docsOriginales: [], registrantes: new Set(), kgreal: null, docYemaRef: null
       };
     }
@@ -2301,10 +2431,22 @@ function agruparConteosPorDia(conteos){
 
 async function calcularEstimacionConteo(c, cu, calibradoPre, baseOverride){
   if(!c.muestras || c.muestras.length===0 || !cu) return null;
+  const tipo = c.tipo || 'dardos';
   const n = c.muestras.length;
+  const densidad = densidadDe(cu);
+
+  if(tipo==='frutos'){
+    const frutosProm = c.muestras.reduce((s,m)=>s+(parseFloat(m.frutos)||0),0)/n;
+    const ref = REF[cu.variedad] || REF_DEFAULT[cu.variedad] || {peso_fruto:0};
+    const pesoFruto = parseFloat(ref.peso_fruto)||0;
+    // No se aplica factor de edad: el fruto ya está cuajado y presente en la planta real, no es una proyección.
+    const kgPlanta = frutosProm * pesoFruto / 1000;
+    const kgHa = densidad ? kgPlanta*densidad : null;
+    return {tipo, frutosProm, densidad, fe:1, kgPlanta, kgHa, fuente:'frutos', pesoFruto};
+  }
+
   const dardosProm = c.muestras.reduce((s,m)=>s+(parseFloat(m.dardos)||0),0)/n;
   const ramillasProm = c.muestras.reduce((s,m)=>s+(parseFloat(m.ramillas)||0),0)/n;
-  const densidad = densidadDe(cu);
   const fe = factorEdad(cu.anioplant, c.temporada);
   let kgPlanta, fuente;
   if(baseOverride){
@@ -2322,7 +2464,7 @@ async function calcularEstimacionConteo(c, cu, calibradoPre, baseOverride){
     }
   }
   const kgHa = densidad ? kgPlanta*densidad : null;
-  return {dardosProm, ramillasProm, densidad, fe, kgPlanta, kgHa, fuente};
+  return {tipo, dardosProm, ramillasProm, densidad, fe, kgPlanta, kgHa, fuente};
 }
 
 const LOGO_FRUTEA_B64 = "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";
@@ -2391,7 +2533,7 @@ async function renderEstimacionesHistorial(){
   window.__estConteosCache = conteos;
   window.__estCuartelesCache = cMap;
 
-  const fVar = $('estFiltroVar'), fTemp = $('estFiltroTemp'), fProd = $('estFiltroProductor'), fExport = $('estExportacion');
+  const fVar = $('estFiltroVar'), fTemp = $('estFiltroTemp'), fProd = $('estFiltroProductor'), fExport = $('estExportacion'), fTipo = $('estFiltroTipo');
   const vars = [...new Set(cuarteles.map(c=>c.variedad))];
   const temps = [...new Set(conteos.map(c=>c.temporada))];
   const prods = [...new Set(cuarteles.map(c=>c.productor).filter(Boolean))];
@@ -2400,55 +2542,60 @@ async function renderEstimacionesHistorial(){
   fProd.innerHTML = '<option value="">Todos los productores</option>' + prods.map(p=>`<option>${p}</option>`).join('');
 
   const draw = async ()=>{
-    const selV = fVar.value, selT = fTemp.value, selP = fProd.value;
+    const selV = fVar.value, selT = fTemp.value, selP = fProd.value, selTipo = fTipo? fTipo.value : '';
     const pctExport = parseFloat(fExport.value)||0;
     const filt = conteos.filter(c=>{
       const cu = cMap[c.cuartelId];
-      return cu && (!selV||cu.variedad===selV) && (!selT||c.temporada===selT) && (!selP||cu.productor===selP);
+      return cu && (!selV||cu.variedad===selV) && (!selT||c.temporada===selT) && (!selP||cu.productor===selP) && (!selTipo||(c.tipo||'dardos')===selTipo);
     });
     if(filt.length===0){ $('estimacionesHistWrap').innerHTML = '<div class="empty">Aún no hay conteos registrados para este filtro. Ve a "Registrar conteo" para cargar el primero.</div>'; return; }
     const grupos = agruparConteosPorDia(filt);
-    let html = '<table><thead><tr><th>Fecha</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Temporada</th><th>Registrado por</th><th>Dardos/pl.</th><th>Ramillas/pl.</th><th>Kg/planta est.</th><th>Kg/ha bruto</th><th>Kg/ha exportable</th><th>Análisis yema</th><th>Coef.</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Productor</th><th>Cuartel</th><th>Variedad</th><th>Temporada</th><th>Registrado por</th><th>Dardos/pl.</th><th>Ramillas/pl.</th><th>Frutos/pl.</th><th>Kg/planta est.</th><th>Kg/ha bruto</th><th>Kg/ha exportable</th><th>Análisis yema</th><th>Coef.</th></tr></thead><tbody>';
     const coefCache = {};
     const exportRows = [];
     for(const g of grupos){
       const cu = cMap[g.cuartelId];
+      const esFrutos = g.tipo==='frutos';
       const docYema = g.docYemaRef;
-      const tieneYemaFila = !!(docYema && docYema.analisisYema && docYema.analisisYema.activo);
+      const tieneYemaFila = !esFrutos && !!(docYema && docYema.analisisYema && docYema.analisisYema.activo);
       let baseOverride = null;
       if(tieneYemaFila){
         const ay = docYema.analisisYema;
         baseOverride = { dardo: (parseFloat(ay.frutos_dardo)||0)*(parseFloat(ay.peso_fruto)||0)/1000, ramilla: (parseFloat(ay.flores_ramilla)||0)*(parseFloat(ay.cuajado)||0)*(parseFloat(ay.peso_fruto)||0)/1000 };
       }
-      if(!baseOverride && !(cu.variedad in coefCache)){
+      if(!esFrutos && !baseOverride && !(cu.variedad in coefCache)){
         coefCache[cu.variedad] = await coefCalibrado(cu.variedad, cuarteles, conteos);
       }
       const est = await calcularEstimacionConteo(g, cu, coefCache[cu.variedad], baseOverride);
       if(!est) continue;
       const kgHaExport = est.kgHa!=null ? est.kgHa*(pctExport/100) : null;
-      const esReal = est.fuente==='propio';
-      const badgeTxt = esReal ? 'real' : (est.fuente==='calibrado' ? 'calibrado' : 'referencial');
-      const badgeClass = esReal ? 'badge-real' : (est.fuente==='calibrado' ? 'badge-calibrado' : 'badge-referencial');
+      const badgeTxt = esFrutos ? 'frutos' : (est.fuente==='propio' ? 'real' : (est.fuente==='calibrado' ? 'calibrado' : 'referencial'));
+      const badgeClass = esFrutos ? 'badge-real' : (est.fuente==='propio' ? 'badge-real' : (est.fuente==='calibrado' ? 'badge-calibrado' : 'badge-referencial'));
       const registradoPorTxt = g.registrantes.join(' + ') || '—';
-      exportRows.push({fecha:g.fecha||'', productor:cu.productor||'', zona:cu.zona||'', cuartel:cu.nombre, variedad:cu.variedad, temporada:g.temporada,
-        registradoPor: registradoPorTxt, dardosProm:est.dardosProm.toFixed(1), ramillasProm:est.ramillasProm.toFixed(1), kgPlanta:est.kgPlanta.toFixed(1),
+      const tipoTxt = esFrutos ? '🍒 Frutos' : '🌸 Dardos';
+      exportRows.push({fecha:g.fecha||'', tipo:tipoTxt, productor:cu.productor||'', zona:cu.zona||'', cuartel:cu.nombre, variedad:cu.variedad, temporada:g.temporada,
+        registradoPor: registradoPorTxt,
+        dardosProm: esFrutos? '' : est.dardosProm.toFixed(1), ramillasProm: esFrutos? '' : est.ramillasProm.toFixed(1),
+        frutosProm: esFrutos? est.frutosProm.toFixed(1) : '', kgPlanta:est.kgPlanta.toFixed(1),
         kgHa: est.kgHa!=null? est.kgHa.toFixed(0):'', kgHaExport: kgHaExport!=null? kgHaExport.toFixed(0):'', coef: badgeTxt});
       html += `<tr>
         <td class="txt">${g.fecha||'—'}</td>
+        <td class="txt">${tipoTxt}</td>
         <td class="txt">${cu.productor||'—'}</td>
         <td class="txt">${cu.nombre}</td>
         <td class="txt">${cu.variedad}</td>
         <td class="txt">${g.temporada}</td>
         <td class="txt">${registradoPorTxt}${g.registrantes.length>1?' <span class="badge badge-calibrado" title="Varias personas contaron este cuartel el mismo día; los datos se combinaron">combinado</span>':''}</td>
-        <td>${est.dardosProm.toFixed(1)}</td>
-        <td>${est.ramillasProm.toFixed(1)}</td>
+        <td>${esFrutos? '—' : est.dardosProm.toFixed(1)}</td>
+        <td>${esFrutos? '—' : est.ramillasProm.toFixed(1)}</td>
+        <td>${esFrutos? est.frutosProm.toFixed(1) : '—'}</td>
         <td>${est.kgPlanta.toFixed(1)}</td>
         <td>${est.kgHa? est.kgHa.toFixed(0) : '<span title="Falta densidad del cuartel">s/d</span>'}</td>
         <td>${kgHaExport!=null? kgHaExport.toFixed(0) : 's/d'}</td>
-        <td><select onchange="onToggleAnalisisYemaFila('${docYema.id}', this.value)">
+        <td>${esFrutos? '—' : `<select onchange="onToggleAnalisisYemaFila('${docYema.id}', this.value)">
           <option value="no" ${!tieneYemaFila?'selected':''}>No</option>
           <option value="si" ${tieneYemaFila?'selected':''}>Sí</option>
-        </select></td>
+        </select>`}</td>
         <td><span class="badge ${badgeClass}">${badgeTxt}</span></td>
       </tr>`;
     }
@@ -2463,10 +2610,10 @@ async function renderEstimacionesHistorial(){
     exportarExcel('estimador_cuaderno_dardos.xlsx', [{
       nombre: 'Estimador',
       columnas: [
-        {header:'Fecha', key:'fecha'}, {header:'Productor', key:'productor'}, {header:'Zona', key:'zona'},
+        {header:'Fecha', key:'fecha'}, {header:'Tipo', key:'tipo'}, {header:'Productor', key:'productor'}, {header:'Zona', key:'zona'},
         {header:'Cuartel', key:'cuartel'}, {header:'Variedad', key:'variedad'}, {header:'Temporada', key:'temporada'},
         {header:'Registrado por', key:'registradoPor'},
-        {header:'Dardos/planta', key:'dardosProm'}, {header:'Ramillas/planta', key:'ramillasProm'},
+        {header:'Dardos/planta', key:'dardosProm'}, {header:'Ramillas/planta', key:'ramillasProm'}, {header:'Frutos/planta', key:'frutosProm'},
         {header:'Kg/planta', key:'kgPlanta'}, {header:'Kg/ha bruto', key:'kgHa'}, {header:'Kg/ha exportable', key:'kgHaExport'},
         {header:'Coeficiente', key:'coef'}
       ],
@@ -2474,8 +2621,124 @@ async function renderEstimacionesHistorial(){
     }]);
   });
   fVar.onchange = draw; fTemp.onchange = draw; fProd.onchange = draw; fExport.oninput = draw;
+  if(fTipo) fTipo.onchange = draw;
   draw();
 }
+
+/* ---------- COMPARATIVO: DARDOS VS FRUTOS ---------- */
+async function renderComparativo(){
+  const conteos = await listConteos();
+  const cuarteles = (await listCuarteles()).filter(isActivo);
+  const cMap = {}; cuarteles.forEach(c=>cMap[c.id]=c);
+
+  const zonas = [...new Set(cuarteles.map(c=>c.zona).filter(Boolean))].sort();
+  const prods = [...new Set(cuarteles.map(c=>c.productor).filter(Boolean))].sort();
+  const vars = [...new Set(cuarteles.map(c=>c.variedad).filter(Boolean))].sort();
+  const temps = [...new Set(conteos.map(c=>c.temporada).filter(Boolean))].sort();
+
+  const fZona = $('cmpFiltroZona'), fProd = $('cmpFiltroProd'), fVar = $('cmpFiltroVar'), fTemp = $('cmpFiltroTemp');
+  const prevZona = fZona.value, prevProd = fProd.value, prevVar = fVar.value, prevTemp = fTemp.value;
+  fZona.innerHTML = '<option value="">Todas las zonas</option>' + zonas.map(z=>`<option ${z===prevZona?'selected':''}>${z}</option>`).join('');
+  fProd.innerHTML = '<option value="">Todos los productores</option>' + prods.map(p=>`<option ${p===prevProd?'selected':''}>${p}</option>`).join('');
+  fVar.innerHTML = '<option value="">Todas las variedades</option>' + vars.map(v=>`<option ${v===prevVar?'selected':''}>${v}</option>`).join('');
+  fTemp.innerHTML = '<option value="">Todas las temporadas (la más reciente con datos, por cuartel)</option>' + temps.map(t=>`<option ${t===prevTemp?'selected':''}>${t}</option>`).join('');
+
+  const puedeEditar = tieneAccesoAdminPanel();
+  let obsMap = {};
+  try{
+    const snap = await db.collection('observacionesComparativo').get();
+    snap.docs.forEach(d=> obsMap[d.id] = d.data());
+  }catch(e){ /* si falla, simplemente se muestra sin observaciones cargadas */ }
+
+  const draw = async ()=>{
+    const selZ = fZona.value, selP = fProd.value, selV = fVar.value, selT = fTemp.value;
+    const cuartelesFiltrados = cuarteles.filter(cu=>
+      (!selZ || cu.zona===selZ) && (!selP || cu.productor===selP) && (!selV || cu.variedad===selV)
+    );
+    if(cuartelesFiltrados.length===0){ $('cmpTableWrap').innerHTML = '<div class="empty">Ningún cuartel activo coincide con este filtro.</div>'; $('cmpResumen').innerHTML=''; return; }
+
+    const coefCache = {};
+    let sumaDardos = 0, sumaFrutos = 0, conAmbos = 0;
+    const filas = [];
+
+    for(const cu of cuartelesFiltrados){
+      const conteosCu = conteos.filter(c=>c.cuartelId===cu.id && (!selT || c.temporada===selT));
+      if(conteosCu.length===0) continue;
+      const grupos = agruparConteosPorDia(conteosCu);
+      const gruposDardos = grupos.filter(g=>g.tipo!=='frutos').sort((a,b)=> (a.fecha||'')<(b.fecha||'') ? 1 : -1);
+      const gruposFrutos = grupos.filter(g=>g.tipo==='frutos').sort((a,b)=> (a.fecha||'')<(b.fecha||'') ? 1 : -1);
+      // Si no se fijó una temporada específica, usamos la más reciente en la que este cuartel tenga AL MENOS un conteo de dardos.
+      const temporadaCuartel = selT || (gruposDardos[0]?.temporada) || (gruposFrutos[0]?.temporada);
+      const gD = gruposDardos.find(g=>g.temporada===temporadaCuartel) || null;
+      const gF = gruposFrutos.find(g=>g.temporada===temporadaCuartel) || null;
+      if(!gD && !gF) continue;
+
+      if(!(cu.variedad in coefCache)) coefCache[cu.variedad] = await coefCalibrado(cu.variedad, cuarteles, conteos);
+      let kgTotalD = null, kgTotalF = null;
+      if(gD){
+        const estD = await calcularEstimacionConteo(gD, cu, coefCache[cu.variedad], null);
+        if(estD && estD.kgHa!=null && cu.hectareas) kgTotalD = estD.kgHa * parseFloat(cu.hectareas);
+      }
+      if(gF){
+        const estF = await calcularEstimacionConteo(gF, cu, coefCache[cu.variedad], null);
+        if(estF && estF.kgHa!=null && cu.hectareas) kgTotalF = estF.kgHa * parseFloat(cu.hectareas);
+      }
+      let pct = null;
+      if(kgTotalD!=null && kgTotalF!=null && kgTotalD>0){ pct = (kgTotalF/kgTotalD)*100; sumaDardos+=kgTotalD; sumaFrutos+=kgTotalF; conAmbos++; }
+
+      const obsKey = `${cu.id}_${temporadaCuartel||'s-t'}`;
+      const obs = obsMap[obsKey];
+      filas.push({cu, temporada: temporadaCuartel||'—', kgTotalD, kgTotalF, pct, obsKey, obsTexto: obs?.texto||''});
+    }
+
+    if(filas.length===0){ $('cmpTableWrap').innerHTML = '<div class="empty">Ningún cuartel del filtro tiene todavía conteos de dardos o de frutos.</div>'; $('cmpResumen').innerHTML=''; return; }
+
+    const pctGeneral = (sumaDardos>0) ? (sumaFrutos/sumaDardos*100) : null;
+    $('cmpResumen').innerHTML = `
+      <div class="box"><div class="v">${sumaDardos? Math.round(sumaDardos).toLocaleString('es-CL') : 's/d'}</div><div class="l">kg total (dardos)</div></div>
+      <div class="box"><div class="v">${sumaFrutos? Math.round(sumaFrutos).toLocaleString('es-CL') : 's/d'}</div><div class="l">kg total (frutos)</div></div>
+      <div class="box"><div class="v">${pctGeneral!=null? pctGeneral.toFixed(0)+'%' : 's/d'}</div><div class="l">semejanza general</div></div>
+      <div class="box"><div class="v">${conAmbos}</div><div class="l">cuarteles con ambos conteos</div></div>
+    `;
+
+    let html = '<table><thead><tr><th>Cuartel</th><th>Variedad</th><th>Productor</th><th>Temporada</th><th>Kg estimado (dardos)</th><th>Kg estimado (frutos)</th><th>% semejanza</th><th>Observación</th></tr></thead><tbody>';
+    filas.forEach(f=>{
+      const pctTxt = f.pct!=null ? f.pct.toFixed(0)+'%' : '—';
+      const pctBadge = f.pct==null ? '' : (f.pct>=85 && f.pct<=115 ? 'badge-real' : (f.pct>=60 ? 'badge-calibrado' : 'badge-referencial'));
+      html += `<tr>
+        <td class="txt">${f.cu.nombre}</td>
+        <td class="txt">${f.cu.variedad}</td>
+        <td class="txt">${f.cu.productor||'—'}</td>
+        <td class="txt">${f.temporada}</td>
+        <td>${f.kgTotalD!=null? Math.round(f.kgTotalD).toLocaleString('es-CL') : 's/d'}</td>
+        <td>${f.kgTotalF!=null? Math.round(f.kgTotalF).toLocaleString('es-CL') : 's/d'}</td>
+        <td>${f.pct!=null? `<span class="badge ${pctBadge}">${pctTxt}</span>` : '—'}</td>
+        <td>
+          ${puedeEditar ? `
+            <textarea id="obs-${f.obsKey}" rows="1" style="width:100%;min-width:160px;font-size:12.5px;" placeholder="Ej: hubo mala cuaja">${f.obsTexto}</textarea>
+            <button class="icon-edit" onclick="guardarObservacionComparativo('${f.obsKey}')">guardar</button>
+          ` : (f.obsTexto ? `<span class="txt">${f.obsTexto}</span>` : '<span style="color:var(--muted);">—</span>')}
+        </td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    $('cmpTableWrap').innerHTML = html;
+  };
+
+  fZona.onchange = draw; fProd.onchange = draw; fVar.onchange = draw; fTemp.onchange = draw;
+  await draw();
+}
+
+window.guardarObservacionComparativo = async (obsKey)=>{
+  if(!tieneAccesoAdminPanel()){ alert('Solo el admin o el admin secundario pueden guardar observaciones.'); return; }
+  const texto = $('obs-'+obsKey).value.trim();
+  try{
+    await db.collection('observacionesComparativo').doc(obsKey).set({
+      texto, actualizadoPor: usuarioActual, correo: correoActual, fecha: new Date().toISOString()
+    }, { merge: true });
+    alert('Observación guardada.');
+  }catch(e){ alert('No se pudo guardar la observación. Revisa tu conexión e inténtalo de nuevo.'); }
+};
 
 function recalcModalYema(){
   const yd = parseFloat($('fy-yemasdardo').value)||0;
@@ -2767,7 +3030,7 @@ window.editarConteo = editarConteo;
 window.borrarConteo = borrarConteo;
 
 /* ---------- AUTENTICACIÓN: Firebase Auth (correo/contraseña) ---------- */
-const VISTAS_PROTEGIDAS = ['v-cuarteles','v-conteo','v-historial','v-estimador'];
+const VISTAS_PROTEGIDAS = ['v-cuarteles','v-conteo','v-historial','v-estimador','v-comparativo'];
 /* ---------- CONEXIÓN: aviso visual + no bloquear guardados sin internet ---------- */
 function actualizarEstadoConexion(){
   const el = $('estadoConexion');
